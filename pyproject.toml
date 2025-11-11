@@ -3,7 +3,8 @@
 name = "py-gn-log"
 version = "0.1.1a2"
 classifiers = ["Private :: Do Not Upload"] # Use this package only internally via git+ssh or git+https.
-description = "Add your description here"
+description = ""
+authors = ["Groovenauts, Inc."]
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = ["python-json-logger>=4.0.0"]
