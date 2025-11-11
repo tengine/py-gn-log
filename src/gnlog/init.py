@@ -15,6 +15,7 @@ class Initializer:
         print("Initializer starting", file=sys.stderr)
         # print_loggers("at the start of Initializer.__init__")
 
+        handler: logging.Handler
         if os.getenv("K_SERVICE") is not None:
             handler = logging.StreamHandler(sys.stdout)  # または sys.stderr
             handler.setFormatter(json_formatter.JsonFormatter())
