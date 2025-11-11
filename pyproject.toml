@@ -1,6 +1,8 @@
+# https://docs.astral.sh/uv/guides/package/
 [project]
 name = "py-gn-log"
 version = "0.1.0"
+classifiers = ["Private :: Do Not Upload"] # Use this package only internally via git+ssh or git+https.
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
