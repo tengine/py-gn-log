@@ -1,1 +1,6 @@
 uv.lock
+
+# artifacts by uv build
+/dist
+# metadata by setuptools (via uv build)
+/*.egg-info
