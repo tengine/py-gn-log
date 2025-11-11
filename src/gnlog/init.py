@@ -1,4 +1,3 @@
-from importlib.metadata import files
 import logging
 import logging.handlers
 import os
