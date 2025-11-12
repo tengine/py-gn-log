@@ -31,7 +31,7 @@ logger.info("Application started")
 logger.error("An error occurred")
 ```
 
-`__name__` は呼び出すモジュールの名前(この場合は .py ファイルの名前から拡張子を除いたもの)を表す特殊な変数です。詳しくは [Python チュートリアル » 6. モジュール](https://docs.python.org/ja/3/tutorial/modules.html) あるいは [Python 言語リファレンス » 3. データモデル » module.__name__](https://docs.python.org/ja/3/reference/datamodel.html#module.__name__) を参照してください。
+`__name__` は呼び出すモジュールの名前(この場合は .py ファイルの名前から拡張子を除いたもの)を表す特殊な変数です。詳しくは [Python チュートリアル » 6. モジュール](https://docs.python.org/ja/3/tutorial/modules.html) あるいは [Python 言語リファレンス » 3. データモデル » module.\_\_name\_\_](https://docs.python.org/ja/3/reference/datamodel.html#module.__name__) を参照してください。
 
 ### 環境変数による設定
 
