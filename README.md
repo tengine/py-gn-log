@@ -130,6 +130,35 @@ isolated_logger = initializer.apply("isolated", propagate=False)
 clean_logger = initializer.apply("clean", clear_handlers=True, add_handler=True)
 ```
 
+## google-cloud-logging の Client.setup_loggingとの併用は不要
+
+[Python 用 Cloud Logging の設定](https://docs.cloud.google.com/logging/docs/setup/python?hl=ja) には以下のようなコードを書くように説明がありますが、これと併用する必要はありません。
+
+<details><summary> setup_logging 利用例 </summary>
+
+```python
+# Imports the Cloud Logging client library
+import google.cloud.logging
+
+# Instantiates a client
+client = google.cloud.logging.Client()
+
+# Retrieves a Cloud Logging handler based on the environment
+# you're running in and integrates the handler with the
+# Python logging module. By default this captures all logs
+# at INFO level and higher
+client.setup_logging()
+```
+
+</details>
+
+### 不要な理由
+
+gnlog.Initializer と google.cloud.logging.Client().setup_logging のどちらも logging.root に自身の用意したハンドラを追加するためです。 log.Initializer を呼び出す前に setup_logging を呼び出した場合は、setup_logging の追加したハンドラを削除します。setup_logging を後で呼び出した場合はハンドラが追加されますが、その場合は一つのログ出力の呼び出しに対して複数のハンドラが動作するので、複数のログエントリが作成されます。
+
+詳しくは py-gn-log の前身を作成した際の以下のPRを参照してください。
+https://github.com/tengine/cloud-run-services-fastapi-example/pull/7
+
 ## 開発者向け
 
 ### 前提条件
