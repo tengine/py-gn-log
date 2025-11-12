@@ -4,3 +4,10 @@ uv.lock
 /dist
 # metadata by setuptools (via uv build)
 *.egg-info/
+
+__pycache__/
+
+# pytest
+# pytest-cov
+.coverage
+htmlcov/
