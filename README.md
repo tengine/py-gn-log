@@ -38,7 +38,7 @@ logger.error("An error occurred")
 #### 環境変数の使われ方
 
 ```mermaid
-flowchart TD
+flowchart LR
     S(start) --> A[環境変数 LOG_LEVEL]
     A --> B{環境変数 K_SERVICE}
     B -->|通常Cloud Runによって指定| C[標準出力 Cloud Logging用JSON形式]
