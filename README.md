@@ -35,6 +35,20 @@ logger.error("An error occurred")
 
 ### 環境変数による設定
 
+#### 環境変数の使われ方
+
+```mermaid
+flowchart TD
+    S(start) --> A[環境変数 LOG_LEVEL]
+    A --> B{環境変数 K_SERVICE}
+    B -->|通常Cloud Runによって指定| C[標準出力 Cloud Logging用JSON形式]
+    B --> |指定なし| D[環境変数 LOG_FORMAT]
+    D --> E{環境変数 LOG_FILE_PATH}
+    E -->|指定あり| F[ファイル出力]
+    E -->|指定なし| G[標準出力]
+```
+
+
 #### ログレベルの設定
 
 環境変数 `LOG_LEVEL` でログレベルを指定できます。
