@@ -1,6 +1,15 @@
 .PHONY: default
 default: check lint
 
+.PHONY: clean
+clean:
+	rm -rf \
+		.mypy_cache \
+		.ruff_cache \
+		dist \
+		.venv \
+		uv.lock
+
 .venv:
 	make install-dev
 
