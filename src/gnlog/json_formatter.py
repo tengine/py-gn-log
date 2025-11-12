@@ -24,6 +24,7 @@ class JsonFormatter(OriginalJsonFormatter):
     python-json-logger をベースに、Cloud Logging で認識される
     特別なフィールド（timestamp, severity）を追加します。
     """
+
     def parse(self) -> list[str]:
         """ログレコードから抽出するフィールドを指定
 

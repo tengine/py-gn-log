@@ -44,6 +44,7 @@ class Initializer:
         >>> initializer = Initializer()
         >>> logger = initializer.apply("my_app")
     """
+
     def __init__(
         self,
         log_level: int | None = None,
