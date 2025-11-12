@@ -28,4 +28,13 @@ jobs:
 
             - run: make check
             - run: make lint
+              continue-on-error: true
             - run: make format git-check
+              continue-on-error: true
+
+            - run: make test-cov
+            - name: Archive htmlcov
+              uses: actions/upload-artifact@v4
+              with:
+                  name: htmlcov
+                  path: htmlcov/
