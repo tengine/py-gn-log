@@ -1,9 +1,4 @@
 import logging
-import os
-import sys
-from io import StringIO
-
-import pytest
 
 from gnlog.init import Initializer, LOCAL_LOG_FORMAT
 
