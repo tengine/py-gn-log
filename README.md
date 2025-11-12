@@ -144,7 +144,7 @@ isolated_logger = initializer.apply("isolated", propagate=False)
 clean_logger = initializer.apply("clean", clear_handlers=True, add_handler=True)
 ```
 
-## google-cloud-logging の Client.setup_loggingとの併用は不要
+### google-cloud-logging の Client.setup_loggingとの併用は不要
 
 [Python 用 Cloud Logging の設定](https://docs.cloud.google.com/logging/docs/setup/python?hl=ja) には以下のようなコードを書くように説明がありますが、これと併用する必要はありません。
 
@@ -178,3 +178,11 @@ https://github.com/tengine/cloud-run-services-fastapi-example/pull/7
 ### 前提条件
 
 - [uv](https://docs.astral.sh/uv/)
+
+### ドキュメントサーバー
+
+```
+make pydoc-server
+```
+
+でドキュメントサーバーが起動します。ブラウザで http://localhost:9000/gnlog にアクセスして内容を確認できます。
