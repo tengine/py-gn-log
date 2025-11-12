@@ -6,6 +6,7 @@ uv.lock
 *.egg-info/
 
 __pycache__/
+.*_cache/
 
 # pytest
 # pytest-cov
