@@ -1,21 +1,41 @@
 .PHONY: default
 default: check lint
 
+.venv:
+	make install-dev
+
+.PHONY: install-dev
+install-dev:
+	uv python install
+	uv sync --all-extras --dev
+
 # Mypy is a static type checker for Python.
 # https://mypy.readthedocs.io/
 .PHONY: check
-check:
+check: .venv
 	uv run mypy src
 
 # An extremely fast Python linter and code formatter, written in Rust.
 # https://docs.astral.sh/ruff/
 .PHONY: lint
-lint:
+lint: .venv
 	uv run ruff check
 
 .PHONY: format
-format:
+format: .venv
 	uv run ruff format
+
+.PHONY: test
+test: .venv
+	uv run pytest
+
+.PHONY: test-cov
+test-cov: .venv
+	uv run pytest --cov=gnlog --cov-report=html
+
+.PHONY: test-watch
+test-watch: .venv
+	uv run pytest --watch
 
 .PHONY: git-check
 git-check: git-check-uncommited-changes git-check-untracked-files
