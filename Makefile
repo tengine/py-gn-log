@@ -1,5 +1,5 @@
 .PHONY: default
-default: check lint
+default: check lint test
 
 .PHONY: clean
 clean:
