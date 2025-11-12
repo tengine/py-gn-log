@@ -4,11 +4,16 @@ default: check lint
 .PHONY: clean
 clean:
 	rm -rf \
-		.mypy_cache \
-		.ruff_cache \
+		.*_cache \
 		dist \
 		.venv \
-		uv.lock
+		uv.lock \
+		__pycache__ \
+		tests/__pycache__ \
+		src/gnlog/__pycache__ \
+		src/gnlog.egg-info \
+		htmlcov \
+		.coverage
 
 .venv:
 	make install-dev
