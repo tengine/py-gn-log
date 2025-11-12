@@ -72,6 +72,7 @@ export LOG_FORMAT="%(asctime)s [%(levelname)s] %(message)s"
 ### Cloud Run での使用
 
 環境変数 `K_SERVICE` が設定されている場合（Cloud Run 環境）、自動的に JSON 形式でログを出力します。
+環境変数 `K_SERVICE` は Cloud Run によって自動的に設定されるため、特別な設定は不要です。詳しくは [Cloud Run > ガイド > コンテナランタイムの契約 > 環境変数](https://docs.cloud.google.com/run/docs/container-contract?hl=ja#env-vars) を参照してください。
 
 ```python
 from gnlog import Initializer
