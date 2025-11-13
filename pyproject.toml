@@ -1,0 +1,16 @@
+# https://docs.astral.sh/uv/guides/package/
+[project]
+name = "py-gn-log"
+version = "0.1.1a2"
+classifiers = ["Private :: Do Not Upload"] # Use this package only internally via git+ssh or git+https.
+description = ""
+authors = [
+    {name = "Groovenauts, Inc. Product div.", email = "div-product@groovenauts.jp"}
+]
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = ["python-json-logger>=4.0.0"]
+
+# https://packaging.python.org/ja/latest/tutorials/packaging-projects/
+# https://packaging.python.org/ja/latest/guides/tool-recommendations/#build-backends
+# uv は [build-system] の指定を必要としません。
