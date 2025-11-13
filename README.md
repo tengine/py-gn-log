@@ -1,5 +1,7 @@
 # py-gn-log
 
+py-gn-log は Cloud Run 環境とローカルの開発環境を考慮した Groovenauts 社内標準(にしようとしている) の Python ロギング設定ライブラリです。Cloud Run 環境では JSON 形式の構造化されたログを出力することで Cloud Logging にログを生成します。
+
 ## インストール
 
 ### uvを使う場合
