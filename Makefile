@@ -92,3 +92,8 @@ git-check-untracked-files:
 	else \
 	  echo "There is untracked file(s): $(GIT_CHECK_UNTRACKED_FILES)" && git status && exit 1 ; \
 	fi
+
+.PHONY: pydoc-server
+pydoc-server: .venv
+	@echo "Open http://localhost:9000/gnlog in your browser to see the gnlog documentation."
+	uv run -m pydoc -n localhost -p 9000
