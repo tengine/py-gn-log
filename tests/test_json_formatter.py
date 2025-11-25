@@ -1,0 +1,117 @@
+import json
+import logging
+
+from gnlog.json_formatter import JsonFormatter
+
+
+class TestJsonFormatter:
+    """JsonFormatter クラスのテスト"""
+
+    def test_parse_returns_expected_fields(self):
+        """parse() が期待するフィールドを返すこと"""
+        formatter = JsonFormatter()
+        fields = formatter.parse()
+        assert fields == ["name", "message", "stack_info"]
+
+    def test_format_adds_timestamp(self):
+        """format() が timestamp フィールドを追加すること"""
+        formatter = JsonFormatter()
+        record = logging.LogRecord(
+            name="test_logger",
+            level=logging.INFO,
+            pathname="test.py",
+            lineno=10,
+            msg="Test message",
+            args=(),
+            exc_info=None,
+        )
+
+        formatted = formatter.format(record)
+        log_dict = json.loads(formatted)
+
+        assert "timestamp" in log_dict
+        # タイムスタンプ形式の検証（ISO 8601形式）
+        assert "T" in log_dict["timestamp"]
+        assert log_dict["timestamp"].endswith("Z")
+
+    def test_format_adds_severity(self):
+        """format() が severity フィールドを追加すること"""
+        formatter = JsonFormatter()
+        record = logging.LogRecord(
+            name="test_logger",
+            level=logging.WARNING,
+            pathname="test.py",
+            lineno=10,
+            msg="Warning message",
+            args=(),
+            exc_info=None,
+        )
+
+        formatted = formatter.format(record)
+        log_dict = json.loads(formatted)
+
+        assert "severity" in log_dict
+        assert log_dict["severity"] == "WARNING"
+
+    def test_format_includes_name_and_message(self):
+        """format() が name と message を含むこと"""
+        formatter = JsonFormatter()
+        record = logging.LogRecord(
+            name="my.logger",
+            level=logging.INFO,
+            pathname="test.py",
+            lineno=10,
+            msg="Test log message",
+            args=(),
+            exc_info=None,
+        )
+
+        formatted = formatter.format(record)
+        log_dict = json.loads(formatted)
+
+        assert log_dict["name"] == "my.logger"
+        assert log_dict["message"] == "Test log message"
+
+    def test_format_different_log_levels(self):
+        """異なるログレベルで severity が正しく設定されること"""
+        formatter = JsonFormatter()
+
+        test_cases = [
+            (logging.DEBUG, "DEBUG"),
+            (logging.INFO, "INFO"),
+            (logging.WARNING, "WARNING"),
+            (logging.ERROR, "ERROR"),
+            (logging.CRITICAL, "CRITICAL"),
+        ]
+
+        for log_level, expected_severity in test_cases:
+            record = logging.LogRecord(
+                name="test",
+                level=log_level,
+                pathname="test.py",
+                lineno=1,
+                msg="message",
+                args=(),
+                exc_info=None,
+            )
+            formatted = formatter.format(record)
+            log_dict = json.loads(formatted)
+            assert log_dict["severity"] == expected_severity
+
+    def test_format_output_is_valid_json(self):
+        """format() の出力が有効なJSONであること"""
+        formatter = JsonFormatter()
+        record = logging.LogRecord(
+            name="test",
+            level=logging.INFO,
+            pathname="test.py",
+            lineno=1,
+            msg="message",
+            args=(),
+            exc_info=None,
+        )
+
+        formatted = formatter.format(record)
+        # JSON としてパース可能であることを確認
+        log_dict = json.loads(formatted)
+        assert isinstance(log_dict, dict)
