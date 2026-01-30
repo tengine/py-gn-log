@@ -30,6 +30,10 @@ class JsonFormatter(OriginalJsonFormatter):
     特別なフィールド（timestamp, severity, labels）を追加します。
     """
 
+    def __init__(self, labels: dict[str, str] | None = None) -> None:
+        super().__init__()
+        self._labels = labels or {}
+
     def parse(self) -> list[str]:
         """ログレコードから抽出するフィールドを指定
 
@@ -73,6 +77,7 @@ class JsonFormatter(OriginalJsonFormatter):
         # Cloud Logging の labels にスレッド情報を追加
         current_thread = threading.current_thread()
         labels = log_data.get(CLOUD_LOGGING_LABELS_KEY, {})
+        labels.update(self._labels)
         labels["thread_id"] = str(record.thread)
         labels["thread_name"] = current_thread.name
         log_data[CLOUD_LOGGING_LABELS_KEY] = labels
