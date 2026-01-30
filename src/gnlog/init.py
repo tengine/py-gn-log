@@ -190,6 +190,6 @@ def _print_logger(logger: logging.Logger, prefix: str) -> None:
         prefix: 行の先頭に付加する文字列
     """
     print(
-        f"{prefix}\t{logger.name=}\tlogger.parent={logger.parent.name if logger.parent else 'no_parent'}\t{logger.propagate=}\tlen(logger.getChildren())={len(logger.getChildren())}\tlen(logger.handlers)={len(logger.handlers)}\t{logger.handlers=}",
+        f"{prefix}\t{logger.name=}\tlogger.parent={logger.parent.name if logger.parent else 'no_parent'}\t{logger.level=}\t{logger.propagate=}\tlen(logger.getChildren())={len(logger.getChildren())}\tlen(logger.handlers)={len(logger.handlers)}\t{logger.handlers=}",
         file=sys.stderr,
     )
