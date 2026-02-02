@@ -13,17 +13,26 @@ timestamp と severity フィールドを自動的に追加します。
 
 from datetime import datetime
 import logging
+import threading
 from typing import Any, Dict
 
 from pythonjsonlogger.json import JsonFormatter as OriginalJsonFormatter
+
+# Cloud Logging の labels フィールドのキー
+# https://cloud.google.com/logging/docs/agent/logging/configuration#special-fields
+CLOUD_LOGGING_LABELS_KEY = "logging.googleapis.com/labels"
 
 
 class JsonFormatter(OriginalJsonFormatter):
     """Google Cloud Logging 向けの JSON フォーマッター
 
     python-json-logger をベースに、Cloud Logging で認識される
-    特別なフィールド（timestamp, severity）を追加します。
+    特別なフィールド（timestamp, severity, labels）を追加します。
     """
+
+    def __init__(self, labels: dict[str, str] | None = None) -> None:
+        super().__init__()
+        self._labels = labels or {}
 
     def parse(self) -> list[str]:
         """ログレコードから抽出するフィールドを指定
@@ -42,7 +51,7 @@ class JsonFormatter(OriginalJsonFormatter):
     ) -> None:
         """ログデータに追加のフィールドを設定
 
-        Cloud Logging 用の timestamp と severity フィールドを追加します。
+        Cloud Logging 用の timestamp, severity, labels フィールドを追加します。
 
         Args:
             log_data: ログデータの辞書（出力されるJSON）
@@ -64,3 +73,11 @@ class JsonFormatter(OriginalJsonFormatter):
         else:
             # level フィールドがない場合は LogRecord の levelname を使用
             log_data["severity"] = record.levelname
+
+        # Cloud Logging の labels にスレッド情報を追加
+        current_thread = threading.current_thread()
+        labels = log_data.get(CLOUD_LOGGING_LABELS_KEY, {})
+        labels.update(self._labels)
+        labels["thread_id"] = str(record.thread)
+        labels["thread_name"] = current_thread.name
+        log_data[CLOUD_LOGGING_LABELS_KEY] = labels

@@ -50,6 +50,7 @@ class Initializer:
         log_level: int | None = None,
         output_path: str | None = None,
         log_format: str | None = None,
+        labels: dict[str, str] | None = None,
     ):
         """Initializer を初期化
 
@@ -70,7 +71,7 @@ class Initializer:
         if os.getenv("K_SERVICE") is not None:
             # Cloud Run: JSON フォーマットで標準出力に出力
             handler = logging.StreamHandler(sys.stdout)
-            handler.setFormatter(json_formatter.JsonFormatter())
+            handler.setFormatter(json_formatter.JsonFormatter(labels=labels))
         else:
             # ローカル環境: 指定された出力先とフォーマットを使用
             if output_path is None:
@@ -190,6 +191,6 @@ def _print_logger(logger: logging.Logger, prefix: str) -> None:
         prefix: 行の先頭に付加する文字列
     """
     print(
-        f"{prefix}\t{logger.name=}\tlogger.parent={logger.parent.name if logger.parent else 'no_parent'}\t{logger.propagate=}\tlen(logger.getChildren())={len(logger.getChildren())}\tlen(logger.handlers)={len(logger.handlers)}\t{logger.handlers=}",
+        f"{prefix}\t{logger.name=}\tlogger.parent={logger.parent.name if logger.parent else 'no_parent'}\t{logger.level=}\t{logger.propagate=}\tlen(logger.getChildren())={len(logger.getChildren())}\tlen(logger.handlers)={len(logger.handlers)}\t{logger.handlers=}",
         file=sys.stderr,
     )
