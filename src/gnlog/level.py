@@ -30,6 +30,7 @@ def parse(s: str, default: int = logging.INFO) -> int:
 
     # WARN と WARNING の両方をサポート
     level_map = {
+        "NOTSET": logging.NOTSET,
         "DEBUG": logging.DEBUG,
         "INFO": logging.INFO,
         "WARN": logging.WARNING,
