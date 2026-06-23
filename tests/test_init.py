@@ -30,9 +30,7 @@ class TestInitializer:
 
         assert not isinstance(initializer.handler.formatter, JsonFormatter)
 
-    def test_initializer_creates_json_formatter_on_cloud_run_service(
-        self, monkeypatch
-    ):
+    def test_initializer_creates_json_formatter_on_cloud_run_service(self, monkeypatch):
         """K_SERVICE がある場合 (Cloud Run Service)、JsonFormatter が使用されること"""
         monkeypatch.setenv("K_SERVICE", "test-service")
         monkeypatch.delenv("CLOUD_RUN_JOB", raising=False)
