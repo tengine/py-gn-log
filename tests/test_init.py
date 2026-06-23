@@ -1,6 +1,6 @@
 import logging
 
-from gnlog.init import Initializer, LOCAL_LOG_FORMAT
+from gnlog.init import Initializer, LOCAL_LOG_FORMAT, is_cloud_run
 
 
 class TestInitializer:
@@ -15,18 +15,40 @@ class TestInitializer:
         logging.root.handlers.clear()
 
     def test_initializer_creates_stream_handler_by_default(self, monkeypatch):
-        """K_SERVICE がない場合、StreamHandler が作成されること"""
+        """Cloud Run 環境変数がない場合、StreamHandler が作成されること"""
         monkeypatch.delenv("K_SERVICE", raising=False)
+        monkeypatch.delenv("CLOUD_RUN_JOB", raising=False)
         monkeypatch.delenv("LOG_FILE_PATH", raising=False)
 
         initializer = Initializer(log_level=logging.INFO)
 
         assert isinstance(initializer.handler, logging.StreamHandler)
         assert initializer.log_level_default == logging.INFO
+        # ローカル環境では JsonFormatter は使われないこと
+        from gnlog.json_formatter import JsonFormatter
 
-    def test_initializer_creates_json_formatter_on_cloud_run(self, monkeypatch):
-        """K_SERVICE がある場合、JsonFormatter が使用されること"""
+        assert not isinstance(initializer.handler.formatter, JsonFormatter)
+
+    def test_initializer_creates_json_formatter_on_cloud_run_service(
+        self, monkeypatch
+    ):
+        """K_SERVICE がある場合 (Cloud Run Service)、JsonFormatter が使用されること"""
         monkeypatch.setenv("K_SERVICE", "test-service")
+        monkeypatch.delenv("CLOUD_RUN_JOB", raising=False)
+
+        initializer = Initializer(log_level=logging.INFO)
+
+        assert isinstance(initializer.handler, logging.StreamHandler)
+        # JsonFormatter が設定されていることを確認
+        from gnlog.json_formatter import JsonFormatter
+
+        assert isinstance(initializer.handler.formatter, JsonFormatter)
+
+    def test_initializer_creates_json_formatter_on_cloud_run_job(self, monkeypatch):
+        """CLOUD_RUN_JOB がある場合 (Cloud Run Job)、JsonFormatter が使用されること"""
+        # Cloud Run Job では K_SERVICE は設定されず CLOUD_RUN_JOB のみが設定される
+        monkeypatch.delenv("K_SERVICE", raising=False)
+        monkeypatch.setenv("CLOUD_RUN_JOB", "test-job")
 
         initializer = Initializer(log_level=logging.INFO)
 
@@ -99,6 +121,31 @@ class TestInitializer:
         # ロガーにハンドラが追加されていること
         assert len(logger.handlers) == 1
         assert logger.handlers[0] == initializer.handler
+
+
+class TestIsCloudRun:
+    """is_cloud_run 関数のテスト"""
+
+    def test_returns_false_when_no_env_vars(self, monkeypatch):
+        """Cloud Run 環境変数がない場合は False を返すこと"""
+        monkeypatch.delenv("K_SERVICE", raising=False)
+        monkeypatch.delenv("CLOUD_RUN_JOB", raising=False)
+
+        assert is_cloud_run() is False
+
+    def test_returns_true_on_cloud_run_service(self, monkeypatch):
+        """K_SERVICE がある場合 (Cloud Run Service) は True を返すこと"""
+        monkeypatch.setenv("K_SERVICE", "test-service")
+        monkeypatch.delenv("CLOUD_RUN_JOB", raising=False)
+
+        assert is_cloud_run() is True
+
+    def test_returns_true_on_cloud_run_job(self, monkeypatch):
+        """CLOUD_RUN_JOB がある場合 (Cloud Run Job) は True を返すこと"""
+        monkeypatch.delenv("K_SERVICE", raising=False)
+        monkeypatch.setenv("CLOUD_RUN_JOB", "test-job")
+
+        assert is_cloud_run() is True
 
 
 class TestLocalLogFormat:
