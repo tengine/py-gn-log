@@ -6,13 +6,28 @@ from gnlog.init import Initializer, LOCAL_LOG_FORMAT, is_cloud_run
 class TestInitializer:
     """Initializer クラスのテスト"""
 
+    def _reset_loggers(self):
+        """ルートロガーとテスト用ロガーの状態をリセット
+
+        ``test.logger`` のような名前付きロガーは logging モジュールにグローバルに
+        保持され、テスト間でハンドラ等の状態がリークする。さらに pytest が
+        ログキャプチャ用の ``LogCaptureHandler`` を差し込むため、``apply()`` 系
+        テストのハンドラ数アサーションが実行環境 (例: ``--cov`` 有無) によって
+        壊れる。各テストの前後でルートと ``test.logger`` のハンドラを
+        明示的にクリアして状態を分離する。
+        """
+        logging.root.handlers.clear()
+        test_logger = logging.getLogger("test.logger")
+        test_logger.handlers.clear()
+        test_logger.propagate = True
+
     def setup_method(self):
         """各テストの前にログハンドラをクリア"""
-        logging.root.handlers.clear()
+        self._reset_loggers()
 
     def teardown_method(self):
         """各テストの後にログハンドラをクリア"""
-        logging.root.handlers.clear()
+        self._reset_loggers()
 
     def test_initializer_creates_stream_handler_by_default(self, monkeypatch):
         """Cloud Run 環境変数がない場合、StreamHandler が作成されること"""
@@ -121,7 +136,10 @@ class TestInitializer:
     def test_apply_clear_handlers(self):
         """apply() の clear_handlers オプションが動作すること"""
         initializer = Initializer(log_level=logging.INFO)
-        logger = logging.getLogger("test.logger")
+        # pytest のログキャプチャや他テストの影響を避けるため固有のロガー名を使う
+        logger_name = "test.apply_clear_handlers"
+        logger = logging.getLogger(logger_name)
+        logger.handlers.clear()
 
         # 既存のハンドラを追加
         dummy_handler = logging.StreamHandler()
@@ -129,13 +147,16 @@ class TestInitializer:
         assert len(logger.handlers) == 1
 
         # clear_handlers=True で既存ハンドラがクリアされること
-        initializer.apply("test.logger", clear_handlers=True)
+        initializer.apply(logger_name, clear_handlers=True)
         assert len(logger.handlers) == 0
 
     def test_apply_add_handler(self):
         """apply() の add_handler オプションが動作すること"""
         initializer = Initializer(log_level=logging.INFO)
-        logger = initializer.apply("test.logger", add_handler=True)
+        # pytest のログキャプチャや他テストの影響を避けるため固有のロガー名を使う
+        logger_name = "test.apply_add_handler"
+        logging.getLogger(logger_name).handlers.clear()
+        logger = initializer.apply(logger_name, add_handler=True)
 
         # ロガーにハンドラが追加されていること
         assert len(logger.handlers) == 1
