@@ -18,6 +18,7 @@ class TestInitializer:
         """Cloud Run 環境変数がない場合、StreamHandler が作成されること"""
         monkeypatch.delenv("K_SERVICE", raising=False)
         monkeypatch.delenv("CLOUD_RUN_JOB", raising=False)
+        monkeypatch.delenv("CLOUD_RUN_WORKER_POOL", raising=False)
         monkeypatch.delenv("LOG_FILE_PATH", raising=False)
 
         initializer = Initializer(log_level=logging.INFO)
@@ -35,6 +36,7 @@ class TestInitializer:
         """K_SERVICE がある場合 (Cloud Run Service)、JsonFormatter が使用されること"""
         monkeypatch.setenv("K_SERVICE", "test-service")
         monkeypatch.delenv("CLOUD_RUN_JOB", raising=False)
+        monkeypatch.delenv("CLOUD_RUN_WORKER_POOL", raising=False)
 
         initializer = Initializer(log_level=logging.INFO)
 
@@ -49,6 +51,25 @@ class TestInitializer:
         # Cloud Run Job では K_SERVICE は設定されず CLOUD_RUN_JOB のみが設定される
         monkeypatch.delenv("K_SERVICE", raising=False)
         monkeypatch.setenv("CLOUD_RUN_JOB", "test-job")
+        monkeypatch.delenv("CLOUD_RUN_WORKER_POOL", raising=False)
+
+        initializer = Initializer(log_level=logging.INFO)
+
+        assert isinstance(initializer.handler, logging.StreamHandler)
+        # JsonFormatter が設定されていることを確認
+        from gnlog.json_formatter import JsonFormatter
+
+        assert isinstance(initializer.handler.formatter, JsonFormatter)
+
+    def test_initializer_creates_json_formatter_on_cloud_run_worker_pool(
+        self, monkeypatch
+    ):
+        """CLOUD_RUN_WORKER_POOL がある場合 (Worker Pool)、JsonFormatter が使われること"""
+        # Worker Pool では K_SERVICE / CLOUD_RUN_JOB は設定されず
+        # CLOUD_RUN_WORKER_POOL のみが設定される
+        monkeypatch.delenv("K_SERVICE", raising=False)
+        monkeypatch.delenv("CLOUD_RUN_JOB", raising=False)
+        monkeypatch.setenv("CLOUD_RUN_WORKER_POOL", "test-worker-pool")
 
         initializer = Initializer(log_level=logging.INFO)
 
@@ -130,6 +151,7 @@ class TestIsCloudRun:
         """Cloud Run 環境変数がない場合は False を返すこと"""
         monkeypatch.delenv("K_SERVICE", raising=False)
         monkeypatch.delenv("CLOUD_RUN_JOB", raising=False)
+        monkeypatch.delenv("CLOUD_RUN_WORKER_POOL", raising=False)
 
         assert is_cloud_run() is False
 
@@ -137,6 +159,7 @@ class TestIsCloudRun:
         """K_SERVICE がある場合 (Cloud Run Service) は True を返すこと"""
         monkeypatch.setenv("K_SERVICE", "test-service")
         monkeypatch.delenv("CLOUD_RUN_JOB", raising=False)
+        monkeypatch.delenv("CLOUD_RUN_WORKER_POOL", raising=False)
 
         assert is_cloud_run() is True
 
@@ -144,6 +167,15 @@ class TestIsCloudRun:
         """CLOUD_RUN_JOB がある場合 (Cloud Run Job) は True を返すこと"""
         monkeypatch.delenv("K_SERVICE", raising=False)
         monkeypatch.setenv("CLOUD_RUN_JOB", "test-job")
+        monkeypatch.delenv("CLOUD_RUN_WORKER_POOL", raising=False)
+
+        assert is_cloud_run() is True
+
+    def test_returns_true_on_cloud_run_worker_pool(self, monkeypatch):
+        """CLOUD_RUN_WORKER_POOL がある場合 (Worker Pool) は True を返すこと"""
+        monkeypatch.delenv("K_SERVICE", raising=False)
+        monkeypatch.delenv("CLOUD_RUN_JOB", raising=False)
+        monkeypatch.setenv("CLOUD_RUN_WORKER_POOL", "test-worker-pool")
 
         assert is_cloud_run() is True
 
