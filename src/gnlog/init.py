@@ -19,6 +19,29 @@ LOCAL_LOG_FORMAT = (
     "%(asctime)s %(levelname)s pid:%(process)s %(message)s:%(filename)s:%(lineno)d"
 )
 
+# Cloud Run 上で自動設定される環境変数。
+# いずれかが存在すれば Cloud Run 環境と判定する。
+# - K_SERVICE: Cloud Run Service でのみ自動設定される
+#   https://cloud.google.com/run/docs/container-contract#services-env-vars
+# - CLOUD_RUN_JOB: Cloud Run Job でのみ自動設定される
+#   https://cloud.google.com/run/docs/container-contract#jobs-env-vars
+# - CLOUD_RUN_WORKER_POOL: Cloud Run Worker Pool でのみ自動設定される
+#   https://cloud.google.com/run/docs/container-contract#worker-pools-env-vars
+_CLOUD_RUN_ENV_VARS = ("K_SERVICE", "CLOUD_RUN_JOB", "CLOUD_RUN_WORKER_POOL")
+
+
+def is_cloud_run() -> bool:
+    """Cloud Run (Service / Job / Worker Pool) 上で実行されているかを判定
+
+    Cloud Run Service では ``K_SERVICE`` が、Cloud Run Job では ``CLOUD_RUN_JOB``
+    が、Cloud Run Worker Pool では ``CLOUD_RUN_WORKER_POOL`` が自動設定される
+    (いずれも排他的)。いずれかが存在すれば Cloud Run 上と判定する。
+
+    Returns:
+        Cloud Run 上で実行されている場合は True
+    """
+    return any(os.getenv(name) is not None for name in _CLOUD_RUN_ENV_VARS)
+
 
 class Initializer:
     """ロギングシステムの初期化クラス
@@ -26,7 +49,9 @@ class Initializer:
     環境変数に基づいてログハンドラとフォーマッターを設定します。
 
     環境変数:
-        K_SERVICE: Cloud Run 環境で自動設定される。存在する場合は JSON フォーマットを使用
+        K_SERVICE: Cloud Run Service で自動設定される。存在する場合は JSON フォーマットを使用
+        CLOUD_RUN_JOB: Cloud Run Job で自動設定される。存在する場合は JSON フォーマットを使用
+        CLOUD_RUN_WORKER_POOL: Cloud Run Worker Pool で自動設定される。存在する場合は JSON フォーマットを使用
         LOG_LEVEL: ログレベル（DEBUG, INFO, WARNING, ERROR, CRITICAL）
         LOG_FILE_PATH: ログファイルのパス（指定時はファイルに出力）
         LOG_FORMAT: ログフォーマット文字列（ローカル環境のみ）
@@ -67,8 +92,8 @@ class Initializer:
 
         handler: logging.Handler
 
-        # Cloud Run 環境（K_SERVICE が設定されている）かどうかで分岐
-        if os.getenv("K_SERVICE") is not None:
+        # Cloud Run 環境（Service / Job のいずれか）かどうかで分岐
+        if is_cloud_run():
             # Cloud Run: JSON フォーマットで標準出力に出力
             handler = logging.StreamHandler(sys.stdout)
             handler.setFormatter(json_formatter.JsonFormatter(labels=labels))
