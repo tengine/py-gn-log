@@ -9,6 +9,7 @@ timestamp と severity フィールドを自動的に追加します。
 - https://acata.hatenadiary.jp/entry/2020/12/28/235631
 - https://github.com/nhairs/python-json-logger?tab=readme-ov-file
 - https://zenn.dev/knowledgework/articles/cloud-logging-special-payload-fields
+- https://cloud.google.com/error-reporting/docs/formatting-error-messages
 """
 
 from datetime import datetime
@@ -81,3 +82,12 @@ class JsonFormatter(OriginalJsonFormatter):
         labels["thread_id"] = str(record.thread)
         labels["thread_name"] = current_thread.name
         log_data[CLOUD_LOGGING_LABELS_KEY] = labels
+
+        # severity ERROR 以上の例外情報を Cloud Error Reporting が認識できる形にする。
+        # python-json-logger はトレースバックを exc_info フィールドに出力するが、
+        # Error Reporting が自動収集するのは message / stack_trace / exception
+        # フィールドのみのため、exc_info のままでは Error Reporting に載らない。
+        # WARNING 以下 (処理を継続できた失敗など) を誤ってエラー集計させないため、
+        # 載せ替えは ERROR 以上に限定する。
+        if record.levelno >= logging.ERROR and log_data.get("exc_info"):
+            log_data["stack_trace"] = log_data.pop("exc_info")
