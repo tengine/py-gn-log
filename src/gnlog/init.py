@@ -10,8 +10,7 @@ import logging.handlers
 import os
 import sys
 
-from . import json_formatter
-from . import level
+from . import json_formatter, level
 
 # ローカル環境用のログフォーマット
 # 参考: https://docs.python.org/3/library/logging.html#formatter-objects
@@ -169,13 +168,12 @@ class Initializer:
         logger.setLevel(log_level)
         if propagate is not None:
             logger.propagate = propagate
-        if clear_handlers:
-            if logger.hasHandlers():
-                print(
-                    f"clearing handlers of logger {logger.name}: {logger.handlers}",
-                    file=sys.stderr,
-                )
-                logger.handlers.clear()
+        if clear_handlers and logger.hasHandlers():
+            print(
+                f"clearing handlers of logger {logger.name}: {logger.handlers}",
+                file=sys.stderr,
+            )
+            logger.handlers.clear()
         if add_handler:
             logger.addHandler(self.handler)
         _print_logger(logger, "Initializer initialized logger")
