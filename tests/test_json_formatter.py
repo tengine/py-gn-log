@@ -265,3 +265,26 @@ class TestJsonFormatter:
         log_dict = json.loads(formatter.format(record))
         assert "stack_trace" not in log_dict
         assert "exc_info" not in log_dict
+
+    def test_format_does_not_overwrite_explicit_stack_trace(self):
+        """呼び出し側が明示的に指定した stack_trace を上書きしないこと"""
+        import sys
+
+        formatter = JsonFormatter()
+        try:
+            raise ValueError("boom")
+        except ValueError:
+            exc_info = sys.exc_info()
+        record = logging.LogRecord(
+            name="test_logger",
+            level=logging.ERROR,
+            pathname="test.py",
+            lineno=10,
+            msg="failed",
+            args=(),
+            exc_info=exc_info,
+        )
+        record.stack_trace = "custom stack trace"
+        log_dict = json.loads(formatter.format(record))
+        assert log_dict["stack_trace"] == "custom stack trace"
+        assert "Traceback" in log_dict["exc_info"]

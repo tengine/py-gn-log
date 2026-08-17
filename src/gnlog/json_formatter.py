@@ -88,6 +88,7 @@ class JsonFormatter(OriginalJsonFormatter):
         # Error Reporting が自動収集するのは message / stack_trace / exception
         # フィールドのみのため、exc_info のままでは Error Reporting に載らない。
         # WARNING 以下 (処理を継続できた失敗など) を誤ってエラー集計させないため、
-        # 載せ替えは ERROR 以上に限定する。
-        if record.levelno >= logging.ERROR and log_data.get("exc_info"):
+        # 載せ替えは ERROR 以上に限定する。呼び出し側が明示的に stack_trace を
+        # 指定している場合は上書きしない。
+        if record.levelno >= logging.ERROR and log_data.get("exc_info") and "stack_trace" not in log_data:
             log_data["stack_trace"] = log_data.pop("exc_info")
