@@ -9,12 +9,13 @@ timestamp と severity フィールドを自動的に追加します。
 - https://acata.hatenadiary.jp/entry/2020/12/28/235631
 - https://github.com/nhairs/python-json-logger?tab=readme-ov-file
 - https://zenn.dev/knowledgework/articles/cloud-logging-special-payload-fields
+- https://cloud.google.com/error-reporting/docs/formatting-error-messages
 """
 
-from datetime import datetime
 import logging
 import threading
-from typing import Any, Dict
+from datetime import UTC, datetime
+from typing import Any
 
 from pythonjsonlogger.json import JsonFormatter as OriginalJsonFormatter
 
@@ -45,9 +46,9 @@ class JsonFormatter(OriginalJsonFormatter):
 
     def add_fields(
         self,
-        log_data: Dict[str, Any],
+        log_data: dict[str, Any],
         record: logging.LogRecord,
-        message_dict: Dict[str, Any],
+        message_dict: dict[str, Any],
     ) -> None:
         """ログデータに追加のフィールドを設定
 
@@ -62,7 +63,8 @@ class JsonFormatter(OriginalJsonFormatter):
         super().add_fields(log_data, record, message_dict)
 
         # ISO 8601 形式のタイムスタンプを追加（Cloud Logging が認識）
-        log_data["timestamp"] = datetime.fromtimestamp(record.created).strftime(
+        # "Z" サフィックスと一致するよう UTC で整形する (Cloud Run は TZ=UTC のため出力は従来と同一)
+        log_data["timestamp"] = datetime.fromtimestamp(record.created, tz=UTC).strftime(
             "%Y-%m-%dT%H:%M:%S.%fZ"
         )
 
@@ -81,3 +83,17 @@ class JsonFormatter(OriginalJsonFormatter):
         labels["thread_id"] = str(record.thread)
         labels["thread_name"] = current_thread.name
         log_data[CLOUD_LOGGING_LABELS_KEY] = labels
+
+        # severity ERROR 以上の例外情報を Cloud Error Reporting が認識できる形にする。
+        # python-json-logger はトレースバックを exc_info フィールドに出力するが、
+        # Error Reporting が自動収集するのは message / stack_trace / exception
+        # フィールドのみのため、exc_info のままでは Error Reporting に載らない。
+        # WARNING 以下 (処理を継続できた失敗など) を誤ってエラー集計させないため、
+        # 載せ替えは ERROR 以上に限定する。呼び出し側が明示的に stack_trace を
+        # 指定している場合は上書きしない。
+        if (
+            record.levelno >= logging.ERROR
+            and log_data.get("exc_info")
+            and "stack_trace" not in log_data
+        ):
+            log_data["stack_trace"] = log_data.pop("exc_info")

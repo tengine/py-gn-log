@@ -217,3 +217,74 @@ class TestJsonFormatter:
         # スレッド情報が含まれていること
         assert "thread_id" in labels
         assert "thread_name" in labels
+
+    def _format_with_exception(self, level: int) -> dict:
+        import sys
+
+        formatter = JsonFormatter()
+        try:
+            raise ValueError("boom")
+        except ValueError:
+            exc_info = sys.exc_info()
+        record = logging.LogRecord(
+            name="test_logger",
+            level=level,
+            pathname="test.py",
+            lineno=10,
+            msg="failed",
+            args=(),
+            exc_info=exc_info,
+        )
+        return json.loads(formatter.format(record))
+
+    def test_format_moves_exc_info_to_stack_trace_for_error(self):
+        """ERROR 以上の例外情報を Error Reporting が認識する stack_trace に載せ替えること"""
+        log_dict = self._format_with_exception(logging.ERROR)
+        assert "Traceback" in log_dict["stack_trace"]
+        assert "ValueError: boom" in log_dict["stack_trace"]
+        assert "exc_info" not in log_dict
+
+    def test_format_keeps_exc_info_for_warning(self):
+        """WARNING 以下の例外情報は exc_info のまま残すこと (Error Reporting に載せない)"""
+        log_dict = self._format_with_exception(logging.WARNING)
+        assert "Traceback" in log_dict["exc_info"]
+        assert "stack_trace" not in log_dict
+
+    def test_format_without_exc_info_has_no_stack_trace(self):
+        """例外情報がない場合は stack_trace を追加しないこと"""
+        formatter = JsonFormatter()
+        record = logging.LogRecord(
+            name="test_logger",
+            level=logging.ERROR,
+            pathname="test.py",
+            lineno=10,
+            msg="failed",
+            args=(),
+            exc_info=None,
+        )
+        log_dict = json.loads(formatter.format(record))
+        assert "stack_trace" not in log_dict
+        assert "exc_info" not in log_dict
+
+    def test_format_does_not_overwrite_explicit_stack_trace(self):
+        """呼び出し側が明示的に指定した stack_trace を上書きしないこと"""
+        import sys
+
+        formatter = JsonFormatter()
+        try:
+            raise ValueError("boom")
+        except ValueError:
+            exc_info = sys.exc_info()
+        record = logging.LogRecord(
+            name="test_logger",
+            level=logging.ERROR,
+            pathname="test.py",
+            lineno=10,
+            msg="failed",
+            args=(),
+            exc_info=exc_info,
+        )
+        record.stack_trace = "custom stack trace"
+        log_dict = json.loads(formatter.format(record))
+        assert log_dict["stack_trace"] == "custom stack trace"
+        assert "Traceback" in log_dict["exc_info"]
