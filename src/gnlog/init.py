@@ -10,8 +10,7 @@ import logging.handlers
 import os
 import sys
 
-from . import json_formatter
-from . import level
+from . import json_formatter, level
 
 # ローカル環境用のログフォーマット
 # 参考: https://docs.python.org/3/library/logging.html#formatter-objects

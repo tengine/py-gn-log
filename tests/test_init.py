@@ -1,6 +1,6 @@
 import logging
 
-from gnlog.init import Initializer, LOCAL_LOG_FORMAT, is_cloud_run
+from gnlog.init import LOCAL_LOG_FORMAT, Initializer, is_cloud_run
 
 
 class TestInitializer:

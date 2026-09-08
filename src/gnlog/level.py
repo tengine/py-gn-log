@@ -4,8 +4,8 @@
 文字列とログレベル定数の相互変換や、環境変数からのログレベル取得を提供します。
 """
 
-import os
 import logging
+import os
 
 
 def parse(s: str, default: int = logging.INFO) -> int:

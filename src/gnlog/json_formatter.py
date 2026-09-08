@@ -11,9 +11,9 @@ timestamp と severity フィールドを自動的に追加します。
 - https://zenn.dev/knowledgework/articles/cloud-logging-special-payload-fields
 """
 
-from datetime import datetime
 import logging
 import threading
+from datetime import datetime
 from typing import Any, Dict
 
 from pythonjsonlogger.json import JsonFormatter as OriginalJsonFormatter
