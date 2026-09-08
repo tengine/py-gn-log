@@ -14,7 +14,7 @@ timestamp と severity フィールドを自動的に追加します。
 import logging
 import threading
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any
 
 from pythonjsonlogger.json import JsonFormatter as OriginalJsonFormatter
 
@@ -45,9 +45,9 @@ class JsonFormatter(OriginalJsonFormatter):
 
     def add_fields(
         self,
-        log_data: Dict[str, Any],
+        log_data: dict[str, Any],
         record: logging.LogRecord,
-        message_dict: Dict[str, Any],
+        message_dict: dict[str, Any],
     ) -> None:
         """ログデータに追加のフィールドを設定
 
