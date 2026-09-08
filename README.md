@@ -150,6 +150,49 @@ logger.info("Service started", extra={"user_id": 123})
 }
 ```
 
+### リクエスト / タスク単位の文脈を全ログ行に付ける
+
+1 つのリクエストや 1 つのタスクの処理中に出るログ行を、あとから 1 つの ID で串刺しにしたい場面 (エラー応答に載せた ID から Cloud Logging を引く、複数サービスにまたがる処理を追う等) のために、`gnlog.context` を用意しています。
+
+`gnlog.context` は `contextvars.ContextVar` に置いた値を、`Initializer` の handler に付けた Filter が各ログ行に注入します。JSON 形式では置いたキー名がそのまま JSON のキーになります。`Initializer()` を呼ぶだけで有効になり、`apply()` していないロガーからの行にも付きます。
+
+```python
+import logging
+from gnlog import Initializer, context
+
+Initializer()
+logger = logging.getLogger(__name__)
+
+# with ブロックの間だけ付ける (抜けると元に戻る。入れ子にできる)
+with context.bind(trace_id="4bf92f35", site="tokyo"):
+    logger.info("処理開始")   # {"message": "処理開始", "trace_id": "4bf92f35", "site": "tokyo", ...}
+
+# 明示的に消すまで残す (リクエストの開始時に set、終了時に clear する使い方)
+context.set(trace_id="4bf92f35")
+logger.info("...")
+context.clear()
+```
+
+- キー名は自由ですが、`message` や `name` など `LogRecord` が自前で持つ属性名は使えません (`ValueError` になります)。
+- `extra={"trace_id": ...}` で明示的に渡した値は、文脈の値より優先されます。
+- テキスト形式では、`LOG_FORMAT` に `%(trace_id)s` のように書いた場合のみ出力されます。ただし文脈が置かれていない行では該当の属性が無いため整形に失敗します。テキスト形式で使う場合は、常に値が置かれている状態を保つか、JSON 形式を使ってください。
+
+#### スレッドをまたぐ場合
+
+`threading.Thread` は ContextVar を継承しません。スレッドをまたいで文脈を引き継ぐには、生成元で `contextvars.copy_context()` を取り、その `run` 経由でスレッドの処理を呼び出してください。`asyncio` のタスクは生成時点の文脈を自動的に引き継ぎます。
+
+```python
+import contextvars
+import threading
+
+with context.bind(trace_id="4bf92f35"):
+    ctx = contextvars.copy_context()
+    t = threading.Thread(target=ctx.run, args=(work,))  # work() の中でも trace_id が付く
+    t.start()
+```
+
+`concurrent.futures.ThreadPoolExecutor` を使う場合も同様に `executor.submit(ctx.run, work)` のように渡します。
+
 ### ログレベルのユーティリティ関数
 
 ```python

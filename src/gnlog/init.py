@@ -10,7 +10,7 @@ import logging.handlers
 import os
 import sys
 
-from . import json_formatter, level
+from . import context, json_formatter, level
 
 # ローカル環境用のログフォーマット
 # 参考: https://docs.python.org/3/library/logging.html#formatter-objects
@@ -94,7 +94,7 @@ class Initializer:
         LOG_FORMAT: ログフォーマット文字列（テキスト形式のみ）
 
     Attributes:
-        handler: 設定されたログハンドラ
+        handler: 設定されたログハンドラ。gnlog.context の文脈を注入する Filter が付いている
         log_level_default: デフォルトのログレベル
 
     Examples:
@@ -173,6 +173,10 @@ class Initializer:
             if log_format is None:
                 log_format = os.getenv("LOG_FORMAT", LOCAL_LOG_FORMAT)
             handler.setFormatter(logging.Formatter(log_format))
+
+        # 文脈 (gnlog.context) を全 record に注入する Filter を handler に付ける。
+        # ルートロガーに付けると伝播してきた record には適用されないため handler に付ける。
+        handler.addFilter(context.ContextFilter())
 
         # ログレベルを設定（引数 > 環境変数 > デフォルト）
         if log_level is None:
