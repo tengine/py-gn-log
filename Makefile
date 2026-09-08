@@ -7,7 +7,6 @@ clean:
 		.*_cache \
 		dist \
 		.venv \
-		uv.lock \
 		__pycache__ \
 		tests/__pycache__ \
 		src/gnlog/__pycache__ \
