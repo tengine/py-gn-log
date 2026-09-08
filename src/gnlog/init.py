@@ -117,6 +117,8 @@ class Initializer:
         set_root_level: bool = True,
         json_ensure_ascii: bool = True,
         json: bool | None = None,
+        error_event: str | None = None,
+        surface: str | None = None,
     ):
         """Initializer を初期化
 
@@ -140,6 +142,11 @@ class Initializer:
             json: True なら JSON 形式、False ならテキスト形式で出力する。None の場合は
                 環境変数 GNLOG_FORMAT (json / text) に従い、それも未設定なら Cloud Run 上
                 かどうかで自動判定する
+            error_event: 指定すると、JSON 形式で severity ERROR 以上のログに分類と
+                dedup 用のフィールド (event / error_type / operation / fingerprint) を
+                付ける。詳しくは json_formatter.JsonFormatter を参照。None なら付けない
+            surface: fingerprint の入力に使うサービスやコンポーネントの名前。
+                error_event 指定時のみ使われる
         """
         self.verbose = verbose
         self._diag("Initializer starting")
@@ -153,7 +160,10 @@ class Initializer:
             handler = logging.StreamHandler(sys.stdout)
             handler.setFormatter(
                 json_formatter.JsonFormatter(
-                    labels=labels, json_ensure_ascii=json_ensure_ascii
+                    labels=labels,
+                    json_ensure_ascii=json_ensure_ascii,
+                    error_event=error_event,
+                    surface=surface,
                 )
             )
         else:

@@ -2,6 +2,7 @@ import logging
 
 import pytest
 
+from gnlog.fingerprint import build_fingerprint
 from gnlog.init import LOCAL_LOG_FORMAT, Initializer, is_cloud_run, use_json_output
 from gnlog.json_formatter import JsonFormatter
 
@@ -115,6 +116,35 @@ class TestInitializer:
         )
         assert initializer.handler.formatter is not None
         assert "日本語" in initializer.handler.formatter.format(record)
+
+    def test_initializer_passes_error_event_and_surface_to_formatter(self, monkeypatch):
+        """error_event と surface が JsonFormatter に渡されること"""
+        monkeypatch.setenv("K_SERVICE", "test-service")
+
+        initializer = Initializer(
+            log_level=logging.INFO,
+            verbose=False,
+            error_event="app_error",
+            surface="worker",
+        )
+
+        record = logging.LogRecord(
+            name="app",
+            level=logging.ERROR,
+            pathname="test.py",
+            lineno=1,
+            msg="failed",
+            args=(),
+            exc_info=None,
+        )
+        assert initializer.handler.formatter is not None
+        import json
+
+        log_dict = json.loads(initializer.handler.formatter.format(record))
+        assert log_dict["event"] == "app_error"
+        assert log_dict["fingerprint"] == build_fingerprint(
+            "worker", "app", "unknown", "failed"
+        )
 
     def test_initializer_respects_log_level_parameter(self):
         """log_level パラメータが反映されること"""

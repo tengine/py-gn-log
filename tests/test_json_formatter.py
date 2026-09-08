@@ -1,6 +1,7 @@
 import json
 import logging
 
+from gnlog.fingerprint import build_fingerprint
 from gnlog.json_formatter import JsonFormatter
 
 
@@ -217,6 +218,81 @@ class TestJsonFormatter:
         # スレッド情報が含まれていること
         assert "thread_id" in labels
         assert "thread_name" in labels
+
+    def _format_error_fields(self, level=logging.ERROR, extra=None, **kwargs) -> dict:
+        formatter = JsonFormatter(**kwargs)
+        record = logging.LogRecord(
+            name="app.orders",
+            level=level,
+            pathname="test.py",
+            lineno=10,
+            msg="order %s not found",
+            args=(123,),
+            exc_info=None,
+        )
+        for key, value in (extra or {}).items():
+            setattr(record, key, value)
+        return json.loads(formatter.format(record))
+
+    def test_error_fields_are_not_added_by_default(self):
+        """error_event 未指定なら ERROR でも分類や fingerprint を付けないこと"""
+        log_dict = self._format_error_fields()
+        for key in ("event", "error_type", "operation", "fingerprint"):
+            assert key not in log_dict
+
+    def test_error_fields_added_for_error_with_defaults(self):
+        """error_event 指定時、ERROR に既定値 (unknown / ロガー名) で付けること"""
+        log_dict = self._format_error_fields(error_event="app_error", surface="worker")
+        assert log_dict["event"] == "app_error"
+        assert log_dict["error_type"] == "unknown"
+        assert log_dict["operation"] == "app.orders"
+        assert log_dict["fingerprint"] == build_fingerprint(
+            "worker", "app.orders", "unknown", "order 123 not found"
+        )
+
+    def test_error_fields_use_extra_values(self):
+        """extra で渡した error_type / operation を使い、fingerprint にも反映すること"""
+        log_dict = self._format_error_fields(
+            error_event="app_error",
+            surface="worker",
+            extra={"error_type": "validation", "operation": "orders.get"},
+        )
+        assert log_dict["error_type"] == "validation"
+        assert log_dict["operation"] == "orders.get"
+        assert log_dict["fingerprint"] == build_fingerprint(
+            "worker", "orders.get", "validation", "order 123 not found"
+        )
+
+    def test_error_fields_do_not_overwrite_explicit_event_and_fingerprint(self):
+        """extra で渡した event / fingerprint を上書きしないこと"""
+        log_dict = self._format_error_fields(
+            error_event="app_error",
+            extra={"event": "custom_event", "fingerprint": "deadbeefdeadbeef"},
+        )
+        assert log_dict["event"] == "custom_event"
+        assert log_dict["fingerprint"] == "deadbeefdeadbeef"
+
+    def test_error_fields_added_for_critical(self):
+        """CRITICAL にも付けること"""
+        log_dict = self._format_error_fields(
+            level=logging.CRITICAL, error_event="app_error"
+        )
+        assert log_dict["event"] == "app_error"
+
+    def test_error_fields_not_added_for_warning(self):
+        """WARNING 以下には付けないこと"""
+        log_dict = self._format_error_fields(
+            level=logging.WARNING, error_event="app_error"
+        )
+        for key in ("event", "error_type", "operation", "fingerprint"):
+            assert key not in log_dict
+
+    def test_error_fields_surface_defaults_to_empty(self):
+        """surface 未指定なら空文字として fingerprint を計算すること"""
+        log_dict = self._format_error_fields(error_event="app_error")
+        assert log_dict["fingerprint"] == build_fingerprint(
+            "", "app.orders", "unknown", "order 123 not found"
+        )
 
     def _format_japanese_message(self, **kwargs) -> str:
         formatter = JsonFormatter(**kwargs)
