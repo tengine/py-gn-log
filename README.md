@@ -41,6 +41,18 @@ logger.error("An error occurred")
 
 `__name__` は呼び出すモジュールの名前(この場合は .py ファイルの名前から拡張子を除いたもの)を表す特殊な変数です。詳しくは [Python チュートリアル » 6. モジュール](https://docs.python.org/ja/3/tutorial/modules.html) あるいは [Python 言語リファレンス » 3. データモデル » module.\_\_name\_\_](https://docs.python.org/ja/3/reference/datamodel.html#module.__name__) を参照してください。
 
+### ルートロガーの level について
+
+`Initializer()` はハンドラの level とあわせてルートロガーの level も設定します (`logging.basicConfig(level=...)` と同じ振る舞い)。そのため `apply()` していないモジュールのロガー (`logging.getLogger(__name__)` で取得しただけのもの) からの INFO / DEBUG も出力されます。
+
+ルートロガーの level を変更したくない場合は `set_root_level=False` を指定してください。この場合、ルートロガーの level は Python の既定 (WARNING) のままなので、`apply()` していないロガーの INFO / DEBUG は出力されません。
+
+```python
+from gnlog import Initializer
+
+initializer = Initializer(set_root_level=False)
+```
+
 ### 環境変数による設定
 
 #### 環境変数の使われ方

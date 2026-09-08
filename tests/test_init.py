@@ -17,6 +17,7 @@ class TestInitializer:
         明示的にクリアして状態を分離する。
         """
         logging.root.handlers.clear()
+        logging.root.setLevel(logging.WARNING)
         test_logger = logging.getLogger("test.logger")
         test_logger.handlers.clear()
         test_logger.propagate = True
@@ -161,6 +162,36 @@ class TestInitializer:
         # ロガーにハンドラが追加されていること
         assert len(logger.handlers) == 1
         assert logger.handlers[0] == initializer.handler
+
+    def test_root_level_follows_log_level_by_default(self):
+        """既定では apply() していないロガーの INFO も handler に届くこと"""
+        records: list[logging.LogRecord] = []
+
+        class Collector(logging.Handler):
+            def emit(self, record: logging.LogRecord) -> None:
+                records.append(record)
+
+        Initializer(log_level=logging.INFO, verbose=False)
+        collector = Collector()
+        logging.root.addHandler(collector)
+        try:
+            other = logging.getLogger("test.not_applied_module")
+            other.setLevel(logging.NOTSET)  # 親 (root) の level に従わせる
+            other.info("INFO from a module that was not applied")
+        finally:
+            logging.root.removeHandler(collector)
+
+        assert [r.getMessage() for r in records] == [
+            "INFO from a module that was not applied"
+        ]
+
+    def test_set_root_level_false_keeps_root_level(self):
+        """set_root_level=False ではルートロガーの level を変更しないこと"""
+        logging.root.setLevel(logging.WARNING)
+
+        Initializer(log_level=logging.DEBUG, verbose=False, set_root_level=False)
+
+        assert logging.root.level == logging.WARNING
 
     def test_verbose_default_prints_diagnostics_to_stderr(self, capsys):
         """既定 (verbose=True) では診断出力が標準エラー出力に出ること"""

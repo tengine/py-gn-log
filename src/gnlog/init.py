@@ -76,6 +76,7 @@ class Initializer:
         log_format: str | None = None,
         labels: dict[str, str] | None = None,
         verbose: bool = True,
+        set_root_level: bool = True,
     ):
         """Initializer を初期化
 
@@ -90,6 +91,9 @@ class Initializer:
             verbose: True の場合、初期化と apply() の過程を診断用に標準エラー出力へ
                 出力する。Cloud Run では標準エラー出力も Cloud Logging に取り込まれ、
                 構造化されていないエントリとして混じるため、不要なら False を指定する
+            set_root_level: True の場合、ルートロガーの level も log_level に揃える。
+                False の場合はルートロガーの level を変更しない (Python の既定は WARNING
+                なので、apply() していないロガーの INFO / DEBUG は出力されない)
         """
         self.verbose = verbose
         self._diag("Initializer starting")
@@ -136,6 +140,13 @@ class Initializer:
 
         # ルートロガーにハンドラを追加
         logging.root.addHandler(handler)
+
+        # ルートロガーの level を handler と揃える。
+        # これを行わないとルートの level は Python の既定 (WARNING) のままなので、
+        # apply() していないロガー (logging.getLogger(__name__) で取っただけのもの) の
+        # INFO / DEBUG は handler に届く前に捨てられる。
+        if set_root_level:
+            logging.root.setLevel(log_level)
 
         # print_loggers("at the end of Initializer.__init__")
 
