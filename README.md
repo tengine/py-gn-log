@@ -164,6 +164,16 @@ isolated_logger = initializer.apply("isolated", propagate=False)
 clean_logger = initializer.apply("clean", clear_handlers=True, add_handler=True)
 ```
 
+#### 非 ASCII 文字を escape せずに出力する
+
+JSON 形式では、既定で非 ASCII 文字 (日本語など) を `\uXXXX` に escape して出力します (python-json-logger の既定と同じ)。Cloud Logging は JSON を復号して表示するので閲覧上の違いはありませんが、標準出力を直接読む場面 (ローカル実行、`docker logs`、CI のログ) では読みにくく、grep もできません。`json_ensure_ascii=False` を指定すると、そのまま出力します。
+
+```python
+from gnlog import Initializer
+
+initializer = Initializer(json_ensure_ascii=False)
+```
+
 #### 診断出力を抑止する
 
 `Initializer()` と `apply()` は、初期化の過程 (ハンドラのクリアやロガーの状態) を診断用に標準エラー出力へ出力します。Cloud Run では標準エラー出力も Cloud Logging に取り込まれ、severity を持たない構造化されていないエントリとして混じります。不要な場合は `verbose=False` を指定してください。

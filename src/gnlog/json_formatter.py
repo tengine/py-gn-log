@@ -31,8 +31,22 @@ class JsonFormatter(OriginalJsonFormatter):
     特別なフィールド（timestamp, severity, labels）を追加します。
     """
 
-    def __init__(self, labels: dict[str, str] | None = None) -> None:
-        super().__init__()
+    def __init__(
+        self,
+        labels: dict[str, str] | None = None,
+        json_ensure_ascii: bool = True,
+    ) -> None:
+        """JsonFormatter を初期化
+
+        Args:
+            labels: Cloud Logging の labels に追加するキーと値
+            json_ensure_ascii: True の場合、非 ASCII 文字を \\uXXXX に escape して出力する
+                (python-json-logger の既定と同じ)。False の場合は日本語などをそのまま
+                出力する。Cloud Logging 上の見え方はどちらでも変わらないが、標準出力を
+                直接読む場面 (ローカル実行、docker logs、CI のログ) では False のほうが
+                読みやすい
+        """
+        super().__init__(json_ensure_ascii=json_ensure_ascii)
         self._labels = labels or {}
 
     def parse(self) -> list[str]:

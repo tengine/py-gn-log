@@ -218,6 +218,32 @@ class TestJsonFormatter:
         assert "thread_id" in labels
         assert "thread_name" in labels
 
+    def _format_japanese_message(self, **kwargs) -> str:
+        formatter = JsonFormatter(**kwargs)
+        record = logging.LogRecord(
+            name="test_logger",
+            level=logging.ERROR,
+            pathname="test.py",
+            lineno=10,
+            msg="マスタが未登録です",
+            args=(),
+            exc_info=None,
+        )
+        return formatter.format(record)
+
+    def test_format_escapes_non_ascii_by_default(self):
+        """既定では非 ASCII 文字が \\uXXXX に escape されること (python-json-logger と同じ)"""
+        formatted = self._format_japanese_message()
+        assert "マスタが未登録です" not in formatted
+        assert "\\u30de\\u30b9\\u30bf" in formatted  # "マスタ"
+        assert json.loads(formatted)["message"] == "マスタが未登録です"
+
+    def test_format_keeps_non_ascii_when_json_ensure_ascii_false(self):
+        """json_ensure_ascii=False では非 ASCII 文字がそのまま出力されること"""
+        formatted = self._format_japanese_message(json_ensure_ascii=False)
+        assert "マスタが未登録です" in formatted
+        assert json.loads(formatted)["message"] == "マスタが未登録です"
+
     def _format_with_exception(self, level: int) -> dict:
         import sys
 

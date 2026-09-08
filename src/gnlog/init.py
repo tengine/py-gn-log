@@ -77,6 +77,7 @@ class Initializer:
         labels: dict[str, str] | None = None,
         verbose: bool = True,
         set_root_level: bool = True,
+        json_ensure_ascii: bool = True,
     ):
         """Initializer を初期化
 
@@ -94,6 +95,9 @@ class Initializer:
             set_root_level: True の場合、ルートロガーの level も log_level に揃える。
                 False の場合はルートロガーの level を変更しない (Python の既定は WARNING
                 なので、apply() していないロガーの INFO / DEBUG は出力されない)
+            json_ensure_ascii: JSON 形式で出力する際に、非 ASCII 文字を \\uXXXX に
+                escape するかどうか。False にすると日本語などをそのまま出力する。
+                JSON 形式でない場合は無視される
         """
         self.verbose = verbose
         self._diag("Initializer starting")
@@ -105,7 +109,11 @@ class Initializer:
         if is_cloud_run():
             # Cloud Run: JSON フォーマットで標準出力に出力
             handler = logging.StreamHandler(sys.stdout)
-            handler.setFormatter(json_formatter.JsonFormatter(labels=labels))
+            handler.setFormatter(
+                json_formatter.JsonFormatter(
+                    labels=labels, json_ensure_ascii=json_ensure_ascii
+                )
+            )
         else:
             # ローカル環境: 指定された出力先とフォーマットを使用
             if output_path is None:

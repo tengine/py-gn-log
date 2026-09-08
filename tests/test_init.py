@@ -93,6 +93,26 @@ class TestInitializer:
 
         assert isinstance(initializer.handler.formatter, JsonFormatter)
 
+    def test_initializer_passes_json_ensure_ascii_to_formatter(self, monkeypatch):
+        """json_ensure_ascii が JsonFormatter に渡されること"""
+        monkeypatch.setenv("K_SERVICE", "test-service")
+
+        initializer = Initializer(
+            log_level=logging.INFO, verbose=False, json_ensure_ascii=False
+        )
+
+        record = logging.LogRecord(
+            name="test",
+            level=logging.INFO,
+            pathname="test.py",
+            lineno=1,
+            msg="日本語",
+            args=(),
+            exc_info=None,
+        )
+        assert initializer.handler.formatter is not None
+        assert "日本語" in initializer.handler.formatter.format(record)
+
     def test_initializer_respects_log_level_parameter(self):
         """log_level パラメータが反映されること"""
         initializer = Initializer(log_level=logging.DEBUG)
