@@ -34,6 +34,24 @@ class TestJsonFormatter:
         assert "T" in log_dict["timestamp"]
         assert log_dict["timestamp"].endswith("Z")
 
+    def test_format_timestamp_is_utc(self):
+        """timestamp が実行環境のタイムゾーンによらず UTC で整形されること"""
+        formatter = JsonFormatter()
+        record = logging.LogRecord(
+            name="test_logger",
+            level=logging.INFO,
+            pathname="test.py",
+            lineno=10,
+            msg="Test message",
+            args=(),
+            exc_info=None,
+        )
+        record.created = 0.0  # 1970-01-01T00:00:00Z
+
+        log_dict = json.loads(formatter.format(record))
+
+        assert log_dict["timestamp"] == "1970-01-01T00:00:00.000000Z"
+
     def test_format_adds_severity(self):
         """format() が severity フィールドを追加すること"""
         formatter = JsonFormatter()

@@ -13,7 +13,7 @@ timestamp と severity フィールドを自動的に追加します。
 
 import logging
 import threading
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from pythonjsonlogger.json import JsonFormatter as OriginalJsonFormatter
@@ -62,7 +62,8 @@ class JsonFormatter(OriginalJsonFormatter):
         super().add_fields(log_data, record, message_dict)
 
         # ISO 8601 形式のタイムスタンプを追加（Cloud Logging が認識）
-        log_data["timestamp"] = datetime.fromtimestamp(record.created).strftime(
+        # 末尾の "Z" は UTC を意味するので、ローカルのタイムゾーンではなく UTC で整形する
+        log_data["timestamp"] = datetime.fromtimestamp(record.created, tz=UTC).strftime(
             "%Y-%m-%dT%H:%M:%S.%fZ"
         )
 
