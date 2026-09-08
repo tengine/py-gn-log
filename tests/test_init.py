@@ -162,6 +162,30 @@ class TestInitializer:
         assert len(logger.handlers) == 1
         assert logger.handlers[0] == initializer.handler
 
+    def test_verbose_default_prints_diagnostics_to_stderr(self, capsys):
+        """既定 (verbose=True) では診断出力が標準エラー出力に出ること"""
+        initializer = Initializer(log_level=logging.INFO)
+        initializer.apply("test.verbose_default", clear_handlers=True)
+
+        captured = capsys.readouterr()
+        assert "Initializer starting" in captured.err
+        assert "Initializer initialized logger" in captured.err
+        assert captured.out == ""
+
+    def test_verbose_false_suppresses_diagnostics(self, capsys):
+        """verbose=False では診断出力が一切出ないこと"""
+        # 既存ハンドラがある状態でも "clearing handlers" が出ないことを確認する
+        logging.root.addHandler(logging.NullHandler())
+        logger_name = "test.verbose_false"
+        logging.getLogger(logger_name).addHandler(logging.NullHandler())
+
+        initializer = Initializer(log_level=logging.INFO, verbose=False)
+        initializer.apply(logger_name, clear_handlers=True)
+
+        captured = capsys.readouterr()
+        assert captured.err == ""
+        assert captured.out == ""
+
 
 class TestIsCloudRun:
     """is_cloud_run 関数のテスト"""

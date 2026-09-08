@@ -146,6 +146,17 @@ isolated_logger = initializer.apply("isolated", propagate=False)
 clean_logger = initializer.apply("clean", clear_handlers=True, add_handler=True)
 ```
 
+#### 診断出力を抑止する
+
+`Initializer()` と `apply()` は、初期化の過程 (ハンドラのクリアやロガーの状態) を診断用に標準エラー出力へ出力します。Cloud Run では標準エラー出力も Cloud Logging に取り込まれ、severity を持たない構造化されていないエントリとして混じります。不要な場合は `verbose=False` を指定してください。
+
+```python
+from gnlog import Initializer
+
+initializer = Initializer(verbose=False)
+logger = initializer.apply(__name__)
+```
+
 ### google-cloud-logging の Client.setup_loggingとの併用は不要
 
 [Python 用 Cloud Logging の設定](https://docs.cloud.google.com/logging/docs/setup/python?hl=ja) には以下のようなコードを書くように説明がありますが、これと併用する必要はありません。
