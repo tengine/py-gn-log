@@ -76,6 +76,7 @@ class Initializer:
         output_path: str | None = None,
         log_format: str | None = None,
         labels: dict[str, str] | None = None,
+        verbose: bool = True,
     ):
         """Initializer を初期化
 
@@ -86,8 +87,13 @@ class Initializer:
             log_level: ログレベル。None の場合は環境変数 LOG_LEVEL から取得
             output_path: ログファイルのパス。None の場合は環境変数 LOG_FILE_PATH を使用
             log_format: ログフォーマット文字列。None の場合は環境変数 LOG_FORMAT を使用
+            labels: Cloud Logging の labels に追加するキーと値
+            verbose: True の場合、初期化と apply() の過程を診断用に標準エラー出力へ
+                出力する。Cloud Run では標準エラー出力も Cloud Logging に取り込まれ、
+                構造化されていないエントリとして混じるため、不要なら False を指定する
         """
-        print("Initializer starting", file=sys.stderr)
+        self.verbose = verbose
+        self._diag("Initializer starting")
         # print_loggers("at the start of Initializer.__init__")
 
         handler: logging.Handler
@@ -124,10 +130,7 @@ class Initializer:
 
         # ルートロガーの既存ハンドラをクリア（重複出力を防ぐため）
         if logging.root.hasHandlers():
-            print(
-                f"clearing handlers of logging.root: {logging.root.handlers}",
-                file=sys.stderr,
-            )
+            self._diag(f"clearing handlers of logging.root: {logging.root.handlers}")
             logging.root.handlers.clear()
 
         # ルートロガーにハンドラを追加
@@ -171,15 +174,24 @@ class Initializer:
             logger.propagate = propagate
         if clear_handlers:
             if logger.hasHandlers():
-                print(
-                    f"clearing handlers of logger {logger.name}: {logger.handlers}",
-                    file=sys.stderr,
+                self._diag(
+                    f"clearing handlers of logger {logger.name}: {logger.handlers}"
                 )
                 logger.handlers.clear()
         if add_handler:
             logger.addHandler(self.handler)
-        _print_logger(logger, "Initializer initialized logger")
+        if self.verbose:
+            _print_logger(logger, "Initializer initialized logger")
         return logger
+
+    def _diag(self, message: str) -> None:
+        """診断用メッセージを標準エラー出力に出力（verbose が True の場合のみ）
+
+        Args:
+            message: 出力する文字列
+        """
+        if self.verbose:
+            print(message, file=sys.stderr)
 
 
 def print_loggers(prefix: str) -> None:
