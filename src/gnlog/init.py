@@ -168,13 +168,12 @@ class Initializer:
         logger.setLevel(log_level)
         if propagate is not None:
             logger.propagate = propagate
-        if clear_handlers:
-            if logger.hasHandlers():
-                print(
-                    f"clearing handlers of logger {logger.name}: {logger.handlers}",
-                    file=sys.stderr,
-                )
-                logger.handlers.clear()
+        if clear_handlers and logger.hasHandlers():
+            print(
+                f"clearing handlers of logger {logger.name}: {logger.handlers}",
+                file=sys.stderr,
+            )
+            logger.handlers.clear()
         if add_handler:
             logger.addHandler(self.handler)
         _print_logger(logger, "Initializer initialized logger")
