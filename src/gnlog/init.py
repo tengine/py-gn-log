@@ -28,6 +28,12 @@ LOCAL_LOG_FORMAT = (
 #   https://cloud.google.com/run/docs/container-contract#worker-pools-env-vars
 _CLOUD_RUN_ENV_VARS = ("K_SERVICE", "CLOUD_RUN_JOB", "CLOUD_RUN_WORKER_POOL")
 
+# 出力形式を明示的に指定する環境変数とその値。
+# 未設定なら Cloud Run 上かどうかで自動判定する。
+GNLOG_FORMAT_ENV_VAR = "GNLOG_FORMAT"
+GNLOG_FORMAT_JSON = "json"
+GNLOG_FORMAT_TEXT = "text"
+
 
 def is_cloud_run() -> bool:
     """Cloud Run (Service / Job / Worker Pool) 上で実行されているかを判定
@@ -42,6 +48,36 @@ def is_cloud_run() -> bool:
     return any(os.getenv(name) is not None for name in _CLOUD_RUN_ENV_VARS)
 
 
+def use_json_output(json: bool | None = None) -> bool:
+    """JSON 形式で出力するかどうかを決定
+
+    優先順位は 引数 ``json`` > 環境変数 ``GNLOG_FORMAT`` > Cloud Run 上かどうか。
+
+    Args:
+        json: True なら JSON、False ならテキスト。None の場合は環境変数と実行環境から決める
+
+    Returns:
+        JSON 形式で出力する場合は True
+
+    Raises:
+        ValueError: 環境変数 GNLOG_FORMAT の値が "json" / "text" のいずれでもない場合
+    """
+    if json is not None:
+        return json
+    value = os.getenv(GNLOG_FORMAT_ENV_VAR)
+    if value is None or value == "":
+        return is_cloud_run()
+    normalized = value.strip().lower()
+    if normalized == GNLOG_FORMAT_JSON:
+        return True
+    if normalized == GNLOG_FORMAT_TEXT:
+        return False
+    raise ValueError(
+        f"Invalid value {value!r} for environment variable {GNLOG_FORMAT_ENV_VAR}: "
+        f"expected {GNLOG_FORMAT_JSON!r} or {GNLOG_FORMAT_TEXT!r}"
+    )
+
+
 class Initializer:
     """ロギングシステムの初期化クラス
 
@@ -51,9 +87,11 @@ class Initializer:
         K_SERVICE: Cloud Run Service で自動設定される。存在する場合は JSON フォーマットを使用
         CLOUD_RUN_JOB: Cloud Run Job で自動設定される。存在する場合は JSON フォーマットを使用
         CLOUD_RUN_WORKER_POOL: Cloud Run Worker Pool で自動設定される。存在する場合は JSON フォーマットを使用
+        GNLOG_FORMAT: 出力形式を明示的に指定する（json または text）。
+            未設定なら上記の Cloud Run の環境変数の有無で自動判定する
         LOG_LEVEL: ログレベル（DEBUG, INFO, WARNING, ERROR, CRITICAL）
         LOG_FILE_PATH: ログファイルのパス（指定時はファイルに出力）
-        LOG_FORMAT: ログフォーマット文字列（ローカル環境のみ）
+        LOG_FORMAT: ログフォーマット文字列（テキスト形式のみ）
 
     Attributes:
         handler: 設定されたログハンドラ
@@ -78,6 +116,7 @@ class Initializer:
         verbose: bool = True,
         set_root_level: bool = True,
         json_ensure_ascii: bool = True,
+        json: bool | None = None,
     ):
         """Initializer を初期化
 
@@ -98,6 +137,9 @@ class Initializer:
             json_ensure_ascii: JSON 形式で出力する際に、非 ASCII 文字を \\uXXXX に
                 escape するかどうか。False にすると日本語などをそのまま出力する。
                 JSON 形式でない場合は無視される
+            json: True なら JSON 形式、False ならテキスト形式で出力する。None の場合は
+                環境変数 GNLOG_FORMAT (json / text) に従い、それも未設定なら Cloud Run 上
+                かどうかで自動判定する
         """
         self.verbose = verbose
         self._diag("Initializer starting")
@@ -105,9 +147,9 @@ class Initializer:
 
         handler: logging.Handler
 
-        # Cloud Run 環境（Service / Job のいずれか）かどうかで分岐
-        if is_cloud_run():
-            # Cloud Run: JSON フォーマットで標準出力に出力
+        # JSON 形式かテキスト形式かで分岐 (引数 > 環境変数 GNLOG_FORMAT > Cloud Run 判定)
+        if use_json_output(json):
+            # JSON フォーマットで標準出力に出力 (Cloud Logging 向け)
             handler = logging.StreamHandler(sys.stdout)
             handler.setFormatter(
                 json_formatter.JsonFormatter(
@@ -115,7 +157,7 @@ class Initializer:
                 )
             )
         else:
-            # ローカル環境: 指定された出力先とフォーマットを使用
+            # テキスト形式: 指定された出力先とフォーマットを使用
             if output_path is None:
                 output_path = os.getenv("LOG_FILE_PATH")
             if output_path is None:
