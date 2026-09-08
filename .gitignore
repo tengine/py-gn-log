@@ -1,4 +1,3 @@
-uv.lock
 
 # artifacts by uv build
 /dist
