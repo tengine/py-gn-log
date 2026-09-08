@@ -16,6 +16,12 @@ uv add git+ssh://git@github.com/tengine/py-gn-log
 uv add git+ssh://git@github.com/tengine/py-gn-log --branch (ブランチ名)
 ```
 
+### 依存ライブラリの版について
+
+py-gn-log は [python-json-logger](https://github.com/nhairs/python-json-logger) に依存しており、動作確認した major に上限を付けて宣言しています (`python-json-logger>=4.0.0,<5`)。python-json-logger の major が上がったときは py-gn-log 側で互換性を確認してから上限を上げます。
+
+ロックファイルを持たず、Docker のビルドのたびに `pip install` で依存を解決する構成のプロジェクトでは、推移依存の版が変わって起動に失敗することを防ぐため、利用側でも `python-json-logger` の版を明示して固定することを推奨します。
+
 ## 使い方
 
 ### 基本的な使い方
