@@ -11,8 +11,11 @@ Cloud Error Reporting は severity=ERROR かつ stack_trace のあるログを�
 
 規則:
     1. UUID (8-4-4-4-12 の 16 進数、大文字小文字を問わない) を ``<uuid>`` に置き換える
-    2. 二重引用符または単一引用符で囲まれた文字列 (改行を含まない) を ``<str>`` に置き換える
-    3. 数値 (整数または小数。単語境界で区切られたもの) を ``<num>`` に置き換える
+    2. 引用文字列 (改行を含まない) を ``<str>`` に置き換える。二重引用符で囲まれたもの、
+       または単一引用符で囲まれたもののうち前後が ASCII の英数字・下線でないもの
+       (can't のようなアポストロフィは引用符とみなさない)
+    3. 数値を ``<num>`` に置き換える。ASCII の数字の並びで、3 桁ごとのカンマ区切り・小数部・
+       指数部 (e10, E-3 など) を含めて 1 つの数値とし、前後は ASCII の単語境界で区切る
     4. 先頭 300 文字に切り詰める
     5. ``surface | operation | error_type | 正規化したメッセージ`` を ``|`` で連結し、
        UTF-8 の SHA-1 の 16 進表現の先頭 16 文字を fingerprint とする
@@ -32,8 +35,12 @@ FINGERPRINT_LENGTH = 16
 _UUID_PATTERN = re.compile(
     r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
 )
-_QUOTED_PATTERN = re.compile(r"\"[^\"\n]*\"|'[^'\n]*'")
-_NUMBER_PATTERN = re.compile(r"\b\d+(?:\.\d+)?\b")
+# 単一引用符は、前後が英数字・下線でないときだけ引用文字列の区切りとみなす
+# (can't / won't のようなアポストロフィを引用符と誤認しないため)。
+_QUOTED_PATTERN = re.compile(r"\"[^\"\n]*\"|(?<![0-9A-Za-z_])'[^'\n]*'(?![0-9A-Za-z_])")
+# 数値は桁区切りのカンマ・小数部・指数部を含めて 1 つにまとめる。
+# \b と \d を ASCII に限定し、他言語 (JavaScript 等) の正規表現と同じ意味にする。
+_NUMBER_PATTERN = re.compile(r"\b\d+(?:,\d{3})*(?:\.\d+)?(?:[eE][+-]?\d+)?\b", re.ASCII)
 
 UUID_PLACEHOLDER = "<uuid>"
 STR_PLACEHOLDER = "<str>"

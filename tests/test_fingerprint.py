@@ -28,6 +28,18 @@ class TestNormalizeMessage:
             # 識別子に含まれる数字は単語境界で区切られていないので置き換えない
             ("table t1 locked", "table t1 locked"),
             ("no variable parts", "no variable parts"),
+            # アポストロフィは引用符とみなさない
+            (
+                "can't connect to database, won't retry",
+                "can't connect to database, won't retry",
+            ),
+            ("user 'bob' can't login", "user <str> can't login"),
+            ("it's 'quoted'.", "it's <str>."),
+            # 桁区切りと指数部を含めて 1 つの数値
+            ("count 1,234 rows", "count <num> rows"),
+            ("count 9,876,543 rows", "count <num> rows"),
+            ("timeout after 1.5e10 ns", "timeout after <num> ns"),
+            ("tolerance 2E-3 exceeded", "tolerance <num> exceeded"),
         ],
     )
     def test_replaces_variable_parts(self, message, expected):
@@ -62,6 +74,20 @@ class TestBuildFingerprint:
             "worker", "orders.create", "validation", "order 2 missing"
         )
         assert a == b
+
+    def test_is_stable_for_grouped_numbers(self):
+        """桁区切りの件数だけが違うメッセージは同じ fingerprint になること"""
+        a = build_fingerprint("w", "op", "validation", "rejected 1,234 rows")
+        b = build_fingerprint("w", "op", "validation", "rejected 9,876,543 rows")
+        assert a == b
+
+    def test_differs_for_different_errors_with_apostrophes(self):
+        """アポストロフィを含む別種のメッセージは違う fingerprint になること"""
+        a = build_fingerprint(
+            "w", "op", "infra", "can't connect to database, won't retry"
+        )
+        b = build_fingerprint("w", "op", "infra", "can't parse payload, won't retry")
+        assert a != b
 
     @pytest.mark.parametrize(
         "kwargs",
