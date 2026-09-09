@@ -54,6 +54,22 @@ class TestContextApi:
                 assert dict(context.get()) == {"trace_id": "inner", "site": "tokyo"}
             assert dict(context.get()) == {"trace_id": "outer", "site": "tokyo"}
 
+    def test_set_inside_bind_persists_after_block(self):
+        """bind() のブロック内で set() した値は、ブロックを抜けても残ること"""
+        context.set(a="1")
+        with context.bind(b="2"):
+            context.set(c="3")
+            assert dict(context.get()) == {"a": "1", "b": "2", "c": "3"}
+        assert dict(context.get()) == {"a": "1", "c": "3"}
+
+    def test_bind_restores_only_its_own_keys_when_overridden_inside(self):
+        """bind() のブロック内で同じキーを set() しても、抜けると突入前の値に戻ること"""
+        context.set(trace_id="before")
+        with context.bind(trace_id="bound"):
+            context.set(trace_id="inside")
+            assert context.get()["trace_id"] == "inside"
+        assert context.get()["trace_id"] == "before"
+
     def test_set_persists_until_clear(self):
         """set() した値は clear() するまで残ること"""
         context.set(trace_id="t1")

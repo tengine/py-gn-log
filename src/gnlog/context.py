@@ -79,7 +79,8 @@ def clear() -> None:
 def bind(**values: Any) -> Iterator[None]:
     """with ブロックの間だけ文脈に値を追加する
 
-    ブロックを抜けると、入る前の文脈に戻ります (例外で抜けた場合も同様)。
+    ブロックを抜けると、ここで置いたキーだけを入る前の状態に戻します (例外で抜けた
+    場合も同様)。ブロックの中で ``set()`` が足した他のキーは残ります。
     入れ子にでき、内側の値が同じキーを上書きします。
 
     Args:
@@ -94,11 +95,17 @@ def bind(**values: Any) -> Iterator[None]:
         >>> logger.info("...")      # trace_id は付かない
     """
     _validate_keys(values)
-    token = _context.set(MappingProxyType({**_context.get(), **values}))
+    before = _context.get()
+    _context.set(MappingProxyType({**before, **values}))
     try:
         yield
     finally:
-        _context.reset(token)
+        # ContextVar.reset() は突入時点の Mapping 全体に戻すため、ブロック内で set() が
+        # 足したキーまで巻き戻してしまう。ここで置いたキーだけを元に戻す。
+        current = _context.get()
+        restored = {k: v for k, v in current.items() if k not in values}
+        restored.update({k: before[k] for k in values if k in before})
+        _context.set(MappingProxyType(restored))
 
 
 class ContextFilter(logging.Filter):
