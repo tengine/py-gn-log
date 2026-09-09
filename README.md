@@ -222,6 +222,7 @@ with trace.bind_headers(request.headers, project_id="my-project"):
 - プロジェクト ID は引数 `project_id`、無ければ環境変数 `GOOGLE_CLOUD_PROJECT` から取ります。**どちらにも無い場合は trace のフィールドを付けません** (既定値で本番のプロジェクト ID を持たないため)。その場合も `trace.current()` と `trace.to_headers()` は動作するので、下流への引き継ぎはできます。
 - `traceparent` と `X-Cloud-Trace-Context` の両方があれば `traceparent` を優先します。ヘッダ名の大文字小文字は区別しません。
 - `X-Cloud-Trace-Context` の SPAN_ID (10 進) は、Cloud Logging の `spanId` に合わせて 16 桁の 16 進に変換します。
+- `trace.to_headers()` は、`span_id` と `sampled` の両方が分かっているときだけ `traceparent` を付けます。W3C の `traceparent` は「不明」を表せないためで、どちらかが不明なら `X-Cloud-Trace-Context` だけを付けます (`;o=` や SPAN_ID の省略で不明を表せます)。
 - `trace.set(trace_context, project_id=...)` / `trace.clear()` で明示的に置いて消すこともできます。`trace.parse_traceparent()` / `trace.parse_cloud_trace_context()` / `trace.from_headers()` は解釈だけを行います。
 
 #### FastAPI / Starlette の middleware の例

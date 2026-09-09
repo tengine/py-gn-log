@@ -220,10 +220,23 @@ class TestToHeaders:
         assert trace.from_headers(trace.to_headers(t)) == t
 
     def test_unknown_span_and_sampled(self):
-        """span_id / sampled が不明なら traceparent は 0 埋め、Cloud 形式は省略すること"""
+        """span_id / sampled が不明なら traceparent を付けず、Cloud 形式は省略で表すこと"""
         headers = trace.to_headers(TraceContext(TRACE_ID))
-        assert headers["traceparent"] == f"00-{TRACE_ID}-{'0' * 16}-00"
-        assert headers["X-Cloud-Trace-Context"] == TRACE_ID
+        assert headers == {"X-Cloud-Trace-Context": TRACE_ID}
+
+    @pytest.mark.parametrize(
+        "t",
+        [
+            TraceContext(TRACE_ID, SPAN_HEX, None),  # sampled 不明
+            TraceContext(TRACE_ID, None, True),  # span 不明
+            TraceContext(TRACE_ID),
+        ],
+    )
+    def test_round_trip_preserves_unknown(self, t):
+        """不明な span_id / sampled は、往復しても不明のまま (False や 0 埋めに変わらない) こと"""
+        headers = trace.to_headers(t)
+        assert "traceparent" not in headers
+        assert trace.from_headers(headers) == t
 
     def test_empty_without_current(self):
         """trace が無ければ空の dict であること"""

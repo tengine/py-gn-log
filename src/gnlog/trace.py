@@ -274,19 +274,25 @@ def bind_headers(
 def to_headers(trace: TraceContext | None = None) -> dict[str, str]:
     """他サービスを呼び出すときに付ける trace のヘッダを組み立てる
 
+    ``traceparent`` は parent-id と flags が必須で「不明」を表せないため、span_id と
+    sampled の両方が分かっているときだけ付ける。どちらかが不明なら
+    ``X-Cloud-Trace-Context`` だけを付ける (こちらは省略で不明を表せる)。
+
     Args:
         trace: 対象の trace。None なら現在の文脈の trace を使う
 
     Returns:
-        ``traceparent`` と ``X-Cloud-Trace-Context`` の dict。trace が無ければ空
+        ``traceparent`` (span_id と sampled が分かっているときのみ) と
+        ``X-Cloud-Trace-Context`` の dict。trace が無ければ空
     """
     if trace is None:
         trace = current()
     if trace is None:
         return {}
-    span_id = trace.span_id or _INVALID_SPAN_ID
-    flags = "01" if trace.sampled else "00"
-    headers = {TRACEPARENT_HEADER: f"00-{trace.trace_id}-{span_id}-{flags}"}
+    headers: dict[str, str] = {}
+    if trace.span_id is not None and trace.sampled is not None:
+        flags = "01" if trace.sampled else "00"
+        headers[TRACEPARENT_HEADER] = f"00-{trace.trace_id}-{trace.span_id}-{flags}"
     cloud = trace.trace_id
     if trace.span_id is not None:
         cloud += f"/{int(trace.span_id, 16)}"
