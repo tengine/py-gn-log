@@ -124,7 +124,9 @@ class Initializer:
         if log_level is None:
             log_level = level.from_env()
         handler.setLevel(log_level)
-        self.handler = handler
+        # ローカル変数の絞り込み後の型 (StreamHandler | RotatingFileHandler) ではなく
+        # 一般の Handler として公開する (利用側で別の Handler を代入できるようにする)
+        self.handler: logging.Handler = handler
         self.log_level_default = log_level
 
         # ルートロガーの既存ハンドラをクリア（重複出力を防ぐため）
