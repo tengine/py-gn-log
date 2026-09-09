@@ -28,10 +28,11 @@ from typing import Any
 _EMPTY: Mapping[str, Any] = MappingProxyType({})
 _context: ContextVar[Mapping[str, Any]] = ContextVar("gnlog_context", default=_EMPTY)
 
-# LogRecord が自前で持つ属性名。これらと同じキーは record を壊すので受け付けない
-# (logging の extra= と同じ制約)。
+# LogRecord が自前で持つ名前 (インスタンス属性・クラス属性・メソッド)。これらと同じキーは
+# record を壊すか、ContextFilter の hasattr 判定で注入されないまま欠落するので受け付けない
+# (logging の extra= と同じ制約)。hasattr と同じ基準にするため dir() から作る。
 _RESERVED_KEYS: frozenset[str] = frozenset(
-    logging.LogRecord("", 0, "", 0, "", (), None).__dict__
+    dir(logging.LogRecord("", 0, "", 0, "", (), None))
 ) | {"message", "asctime"}
 
 

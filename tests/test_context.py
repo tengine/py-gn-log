@@ -84,9 +84,13 @@ class TestContextApi:
         with pytest.raises(TypeError):
             context.get()["trace_id"] = "changed"  # type: ignore[index]
 
-    @pytest.mark.parametrize("key", ["message", "name", "asctime", "levelname"])
+    @pytest.mark.parametrize(
+        "key",
+        # インスタンス属性だけでなく、メソッドやクラス属性 (hasattr が True になるもの) も含む
+        ["message", "name", "asctime", "levelname", "getMessage", "__dict__"],
+    )
     def test_reserved_keys_are_rejected(self, key):
-        """LogRecord の属性名と同じキーは受け付けないこと"""
+        """LogRecord が持つ名前 (属性・メソッド) と同じキーは受け付けないこと"""
         with pytest.raises(ValueError, match="LogRecord"):
             context.set(**{key: "x"})
         with pytest.raises(ValueError, match="LogRecord"), context.bind(**{key: "x"}):
