@@ -3,7 +3,8 @@ import logging
 
 import pytest
 
-from gnlog import Initializer, context, trace
+from gnlog import context, trace
+from gnlog.google.cloud_run import setup_logging
 from gnlog.trace import TraceContext
 
 TRACE_ID = "4bf92f3577b34da6a3ce929d0e0e4736"
@@ -147,7 +148,7 @@ class TestBindAndSet:
         """内側の trace に span_id / sampled が無くても、外側の値がログに残らないこと"""
         logging.root.handlers.clear()
         try:
-            Initializer(log_level=logging.INFO, verbose=False, json=True)
+            setup_logging(log_level=logging.INFO, verbose=False, json=True)
             logger = logging.getLogger("test.trace.nested")
             outer = TraceContext("a" * 32, SPAN_HEX, True)
             inner = TraceContext("b" * 32)
@@ -251,8 +252,8 @@ class TestJsonOutput:
         logging.root.handlers.clear()
 
     def test_special_fields_appear_in_json_lines(self, capsys):
-        """Initializer 経由の JSON 出力に Cloud Logging の特殊フィールドが載ること"""
-        Initializer(log_level=logging.INFO, verbose=False, json=True)
+        """setup_logging() 経由の JSON 出力に Cloud Logging の特殊フィールドが載ること"""
+        setup_logging(log_level=logging.INFO, verbose=False, json=True)
         logger = logging.getLogger("test.trace.json")
         headers = {"X-Cloud-Trace-Context": f"{TRACE_ID}/{SPAN_DEC};o=1"}
 

@@ -1,20 +1,20 @@
 """
 gnlog - Groovenauts ログユーティリティパッケージ
 
-このパッケージは、Python の標準 logging モジュールを拡張し、
-環境変数による設定やCloud Run向けのJSON出力をサポートします。
+Python の標準 logging モジュールを拡張し、環境変数による設定や構造化ログの出力を
+サポートします。
+
+このパッケージの直下は provider (Google Cloud / AWS 等) を知らない共通部です。
+ロギングの設定の入口は provider ごとのサブパッケージにあります
+(Cloud Run なら ``gnlog.google.cloud_run.setup_logging``)。
 """
 
-from . import context, fingerprint, level, trace
-from .init import Initializer, is_cloud_run, print_loggers, use_json_output
+from . import context, fingerprint, level, output, trace
 
 __all__ = [
-    "Initializer",
     "context",
     "fingerprint",
-    "is_cloud_run",
     "level",
-    "print_loggers",
+    "output",
     "trace",
-    "use_json_output",
 ]

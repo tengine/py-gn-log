@@ -5,8 +5,9 @@ import threading
 
 import pytest
 
-from gnlog import Initializer, context
+from gnlog import context
 from gnlog.context import ContextFilter
+from gnlog.google.cloud_run import setup_logging
 
 
 @pytest.fixture(autouse=True)
@@ -163,8 +164,8 @@ class TestContextFilter:
         assert seen == {"plain": None, "copied": "t1"}
 
 
-class TestInitializerIntegration:
-    """Initializer 経由で JSON 出力に文脈が載ることのテスト"""
+class TestSetupLoggingIntegration:
+    """setup_logging() 経由で JSON 出力に文脈が載ることのテスト"""
 
     @pytest.fixture(autouse=True)
     def _reset_root(self):
@@ -174,7 +175,7 @@ class TestInitializerIntegration:
 
     def test_context_appears_in_json_output_of_unapplied_logger(self, capsys):
         """apply() していないロガー経由でも、JSON 出力に文脈のキーが載ること"""
-        Initializer(log_level=logging.INFO, verbose=False, json=True)
+        setup_logging(log_level=logging.INFO, verbose=False, json=True)
         logger = logging.getLogger("test.context.not_applied")
 
         with context.bind(trace_id="t1", site="tokyo"):
@@ -192,7 +193,7 @@ class TestInitializerIntegration:
 
     def test_extra_overrides_context_in_json_output(self, capsys):
         """extra= で渡した値が文脈の値より優先されること"""
-        Initializer(log_level=logging.INFO, verbose=False, json=True)
+        setup_logging(log_level=logging.INFO, verbose=False, json=True)
         logger = logging.getLogger("test.context.extra")
 
         with context.bind(trace_id="from-context"):
@@ -202,11 +203,13 @@ class TestInitializerIntegration:
         assert line["trace_id"] == "from-extra"
 
     def test_filter_survives_handler_clear_order(self, capsys):
-        """Initializer() が root.handlers をクリアしても文脈の注入が失われないこと"""
-        # 利用側が Filter を root に付ける方式では Initializer() の後に付ける必要があったが、
+        """setup_logging() が root.handlers をクリアしても文脈の注入が失われないこと"""
+        # 利用側が Filter を root に付ける方式では setup_logging() の後に付ける必要があったが、
         # handler 側に付けているので順序を気にする必要がない
-        Initializer(log_level=logging.INFO, verbose=False, json=True)
-        Initializer(log_level=logging.INFO, verbose=False, json=True)  # 2 回目でも同じ
+        setup_logging(log_level=logging.INFO, verbose=False, json=True)
+        setup_logging(
+            log_level=logging.INFO, verbose=False, json=True
+        )  # 2 回目でも同じ
 
         with context.bind(trace_id="t1"):
             logging.getLogger("test.context.reinit").info("msg")
