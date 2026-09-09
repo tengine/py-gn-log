@@ -163,11 +163,12 @@ from gnlog import Initializer, context
 Initializer()
 logger = logging.getLogger(__name__)
 
-# with ブロックの間だけ付ける (抜けると元に戻る。入れ子にできる)
+# with ブロックの間だけ付ける (抜けると、ここで置いたキーだけが元に戻る。入れ子にできる)
 with context.bind(trace_id="4bf92f35", site="tokyo"):
     logger.info("処理開始")   # {"message": "処理開始", "trace_id": "4bf92f35", "site": "tokyo", ...}
 
-# 明示的に消すまで残す (リクエストの開始時に set、終了時に clear する使い方)
+# 明示的に消すまで残す (リクエストの開始時に set、終了時に clear する使い方)。
+# bind のブロック内で set した値も、ブロックを抜けた後に残る
 context.set(trace_id="4bf92f35")
 logger.info("...")
 context.clear()
