@@ -2,6 +2,23 @@
 
 py-gn-log は Cloud Run 環境とローカルの開発環境を考慮した Groovenauts 社内標準(にしようとしている) の Python ロギング設定ライブラリです。Cloud Run 環境では JSON 形式の構造化されたログを出力することで Cloud Logging にログを生成します。
 
+## パッケージの構造
+
+`gnlog` の直下は provider (Google Cloud / AWS 等) を知らない共通部で、provider ごとの実装はサブパッケージにあります。利用側は使う provider のサブパッケージを明示的に import し、そこを入口にします。
+
+| モジュール | 役割 |
+|---|---|
+| `gnlog.context` | リクエスト / タスク単位の文脈を全ログ行に付ける (ContextVar + Filter) |
+| `gnlog.fingerprint` | ERROR の dedup 用 fingerprint の正規化とハッシュ |
+| `gnlog.level` | ログレベルの変換 |
+| `gnlog.output` | 出力形式の決定 (`GNLOG_FORMAT`)、テキスト形式の handler、ルートロガーへの組み込み |
+| `gnlog.trace` | W3C Trace Context (`traceparent`) の解釈・組み立てと、現在の trace の保持 |
+| `gnlog.google.cloud_run` | **Cloud Run 向けの入口** `setup_logging()` と `is_cloud_run()` |
+| `gnlog.google.cloud_logging` | Cloud Logging 向けの JSON formatter (severity / labels / stack_trace / fingerprint) |
+| `gnlog.google.cloud_trace` | `X-Cloud-Trace-Context` の解釈と Cloud Logging の特殊フィールド (`logging.googleapis.com/trace` 等) |
+
+`import gnlog` は `gnlog.google` を読み込みません。AWS 向けの実装を足す場合も `gnlog.aws.*` として同じ構造で置き、Google 向けアプリのプロセスに影響しない形にします。
+
 ## インストール
 
 ### uvを使う場合
@@ -28,29 +45,31 @@ py-gn-log は [python-json-logger](https://github.com/nhairs/python-json-logger)
 
 ```python
 import logging
-from gnlog import Initializer
+from gnlog.google.cloud_run import setup_logging
 
-# ロギングを初期化
-initializer = Initializer(log_level=logging.INFO)
+# ロギングを初期化 (Cloud Run 上なら Cloud Logging 向けの JSON、外ならテキスト)
+setup = setup_logging(log_level=logging.INFO)
 
 # ロガーを取得して使用
-logger = initializer.apply(__name__)
+logger = setup.apply(__name__)
 logger.info("Application started")
 logger.error("An error occurred")
 ```
+
+`setup_logging()` はルートロガーに handler を組み込むので、`apply()` を使わず `logging.getLogger(__name__)` で取ったロガーからの出力にも同じ設定が効きます。`apply()` はロガーごとに level などを変えたいときに使います。
 
 `__name__` は呼び出すモジュールの名前(この場合は .py ファイルの名前から拡張子を除いたもの)を表す特殊な変数です。詳しくは [Python チュートリアル » 6. モジュール](https://docs.python.org/ja/3/tutorial/modules.html) あるいは [Python 言語リファレンス » 3. データモデル » module.\_\_name\_\_](https://docs.python.org/ja/3/reference/datamodel.html#module.__name__) を参照してください。
 
 ### ルートロガーの level について
 
-`Initializer()` はハンドラの level とあわせてルートロガーの level も設定します (`logging.basicConfig(level=...)` と同じ振る舞い)。そのため `apply()` していないモジュールのロガー (`logging.getLogger(__name__)` で取得しただけのもの) からの INFO / DEBUG も出力されます。
+`setup_logging()` はハンドラの level とあわせてルートロガーの level も設定します (`logging.basicConfig(level=...)` と同じ振る舞い)。そのため `apply()` していないモジュールのロガー (`logging.getLogger(__name__)` で取得しただけのもの) からの INFO / DEBUG も出力されます。
 
 ルートロガーの level を変更したくない場合は `set_root_level=False` を指定してください。この場合、ルートロガーの level は Python の既定 (WARNING) のままなので、`apply()` していないロガーの INFO / DEBUG は出力されません。
 
 ```python
-from gnlog import Initializer
+from gnlog.google.cloud_run import setup_logging
 
-initializer = Initializer(set_root_level=False)
+setup_logging(set_root_level=False)
 ```
 
 ### 環境変数による設定
@@ -83,35 +102,35 @@ export LOG_LEVEL=DEBUG
 指定可能な値: `DEBUG`, `INFO`, `WARN`, `WARNING`, `ERROR`, `CRITICAL`
 
 ```python
-from gnlog import Initializer
+from gnlog.google.cloud_run import setup_logging
 
 # 環境変数 LOG_LEVEL からログレベルを読み込む
-initializer = Initializer()
-logger = initializer.apply("my_app")
+setup = setup_logging()
+logger = setup.apply("my_app")
 ```
 
 #### 出力形式の明示的な指定
 
-環境変数 `GNLOG_FORMAT` で、Cloud Run 上かどうかによらず出力形式を指定できます。指定できる値は `json` (Cloud Logging 用の JSON 形式) と `text` (テキスト形式) です。それ以外の値を指定すると `Initializer()` が `ValueError` を送出します。未設定なら Cloud Run の環境変数の有無で自動判定します。
+環境変数 `GNLOG_FORMAT` で、Cloud Run 上かどうかによらず出力形式を指定できます。指定できる値は `json` (Cloud Logging 用の JSON 形式) と `text` (テキスト形式) です。それ以外の値を指定すると `setup_logging()` が `ValueError` を送出します (`json` 引数を明示した場合は環境変数を読まないので送出しません)。未設定なら Cloud Run の環境変数の有無で自動判定します。
 
 ```bash
 # ローカルや CI で Cloud Logging に取り込まれる形そのままの JSON 行を確認する
 export GNLOG_FORMAT=json
 ```
 
-コードから指定する場合は `Initializer(json=True)` / `Initializer(json=False)` を使います。引数は環境変数より優先されます。
+コードから指定する場合は `setup_logging(json=True)` / `setup_logging(json=False)` を使います。引数は環境変数より優先されます。
 
 ```python
-from gnlog import Initializer
+from gnlog.google.cloud_run import setup_logging
 
-initializer = Initializer(json=True)
+setup_logging(json=True)
 ```
 
 なお、環境変数 `LOG_FORMAT` はテキスト形式の **format 文字列** を指定するものです。`LOG_FORMAT=json` のように形式名を設定すると format 文字列として解釈され `ValueError` になります。形式の切り替えには `GNLOG_FORMAT` を使ってください。
 
 #### ログファイルへの出力
 
-環境変数 `LOG_FILE_PATH` でログファイルのパスを指定できます。
+環境変数 `LOG_FILE_PATH` でログファイルのパスを指定できます (テキスト形式のみ。JSON 形式は常に標準出力です)。
 
 ```bash
 export LOG_FILE_PATH=/var/log/myapp.log
@@ -131,13 +150,15 @@ export LOG_FORMAT="%(asctime)s [%(levelname)s] %(message)s"
 環境変数 `K_SERVICE` は Cloud Run によって自動的に設定されるため、特別な設定は不要です。詳しくは [Cloud Run > ガイド > コンテナランタイムの契約 > 環境変数](https://docs.cloud.google.com/run/docs/container-contract?hl=ja#env-vars) を参照してください。
 
 ```python
-from gnlog import Initializer
+from gnlog.google.cloud_run import setup_logging
 
 # Cloud Run では自動的に JSON フォーマットが使用される
-initializer = Initializer()
-logger = initializer.apply("my_service")
+setup = setup_logging()
+logger = setup.apply("my_service")
 logger.info("Service started", extra={"user_id": 123})
 ```
+
+Cloud Run 上かどうかの判定は `gnlog.google.cloud_run.is_cloud_run()` として公開しています。この関数だけを使う場合、`gnlog.google.cloud_run` の import では python-json-logger を読み込みません。
 
 出力例:
 ```json
@@ -154,13 +175,14 @@ logger.info("Service started", extra={"user_id": 123})
 
 1 つのリクエストや 1 つのタスクの処理中に出るログ行を、あとから 1 つの ID で串刺しにしたい場面 (エラー応答に載せた ID から Cloud Logging を引く、複数サービスにまたがる処理を追う等) のために、`gnlog.context` を用意しています。
 
-`gnlog.context` は `contextvars.ContextVar` に置いた値を、`Initializer` の handler に付けた Filter が各ログ行に注入します。JSON 形式では置いたキー名がそのまま JSON のキーになります。`Initializer()` を呼ぶだけで有効になり、`apply()` していないロガーからの行にも付きます。
+`gnlog.context` は `contextvars.ContextVar` に置いた値を、`setup_logging()` が組み込んだ handler の Filter が各ログ行に注入します。JSON 形式では置いたキー名がそのまま JSON のキーになります。`setup_logging()` を呼ぶだけで有効になり、`apply()` していないロガーからの行にも付きます。
 
 ```python
 import logging
-from gnlog import Initializer, context
+from gnlog import context
+from gnlog.google.cloud_run import setup_logging
 
-Initializer()
+setup_logging()
 logger = logging.getLogger(__name__)
 
 # with ブロックの間だけ付ける (抜けると、ここで置いたキーだけが元に戻る。入れ子にできる)
@@ -174,7 +196,8 @@ logger.info("...")
 context.clear()
 ```
 
-- キー名は自由ですが、`message` や `name` など `LogRecord` が自前で持つ属性名は使えません (`ValueError` になります)。
+- キー名は自由ですが、`message` や `name` など `LogRecord` が自前で持つ属性名は使えません (`ValueError` になります)。`logging.googleapis.com/trace` のように Python の識別子にならないキーは、`context.set({...})` / `context.bind({...})` と Mapping を位置引数で渡します。
+- 値が `None` のキーは出力されません (文脈上で「そのキーは無い」ことを表すために使えます)。
 - `extra={"trace_id": ...}` で明示的に渡した値は、文脈の値より優先されます。
 - テキスト形式では、`LOG_FORMAT` に `%(trace_id)s` のように書いた場合のみ出力されます。ただし文脈が置かれていない行では該当の属性が無いため整形に失敗します。テキスト形式で使う場合は、常に値が置かれている状態を保つか、JSON 形式を使ってください。
 
@@ -198,13 +221,14 @@ with context.bind(trace_id="4bf92f35"):
 
 複数サービスにまたがる処理のログを串刺しにするには、独自の ID ではなく Cloud Trace の仕組みに寄せるのが自然です。Cloud Run はリクエストごとに `X-Cloud-Trace-Context` ヘッダ (と W3C の `traceparent`) を付け、Cloud Logging は JSON の特殊フィールド `logging.googleapis.com/trace` (`projects/<PROJECT_ID>/traces/<TRACE_ID>`)、`logging.googleapis.com/spanId`、`logging.googleapis.com/trace_sampled` を認識してログエントリを trace に紐付けます (Logs Explorer で同じ trace のログを横断表示でき、Cloud Trace とも繋がります)。
 
-`gnlog.trace` は、受信ヘッダから trace を取り出して上の文脈 (`gnlog.context`) に特殊フィールドとして置く関数と、他サービスを呼び出すときに現在の trace をヘッダとして組み立てる関数を提供します。
+`gnlog.google.cloud_trace` は、受信ヘッダから trace を取り出して上の文脈 (`gnlog.context`) に特殊フィールドとして置く関数と、他サービスを呼び出すときに現在の trace をヘッダとして組み立てる関数を提供します。W3C の `traceparent` の解釈・組み立てと `TraceContext` は共通部の `gnlog.trace` にあり、`cloud_trace` はその上に `X-Cloud-Trace-Context` と Cloud Logging の特殊フィールドを載せたものです。
 
 ```python
 import logging
-from gnlog import Initializer, trace
+from gnlog.google import cloud_trace as trace
+from gnlog.google.cloud_run import setup_logging
 
-Initializer()
+setup_logging()
 logger = logging.getLogger(__name__)
 
 # 受信ヘッダから trace を取り出し、ブロックの間だけ全ログ行に付ける
@@ -224,6 +248,7 @@ with trace.bind_headers(request.headers, project_id="my-project"):
 - `X-Cloud-Trace-Context` の SPAN_ID (10 進) は、Cloud Logging の `spanId` に合わせて 16 桁の 16 進に変換します。
 - `trace.to_headers()` は、`span_id` と `sampled` の両方が分かっているときだけ `traceparent` を付けます。W3C の `traceparent` は「不明」を表せないためで、どちらかが不明なら `X-Cloud-Trace-Context` だけを付けます (`;o=` や SPAN_ID の省略で不明を表せます)。
 - `trace.set(trace_context, project_id=...)` / `trace.clear()` で明示的に置いて消すこともできます。`trace.parse_traceparent()` / `trace.parse_cloud_trace_context()` / `trace.from_headers()` は解釈だけを行います。
+- プロジェクト ID が決まらない状態で `bind()` / `set()` を呼ぶと、特殊フィールドは置かれません (前に置いた trace のフィールドがあればそのまま残ります)。
 
 #### FastAPI / Starlette の middleware の例
 
@@ -231,7 +256,7 @@ with trace.bind_headers(request.headers, project_id="my-project"):
 
 ```python
 from fastapi import FastAPI, Request
-from gnlog import trace
+from gnlog.google import cloud_trace as trace
 
 app = FastAPI()
 
@@ -263,7 +288,7 @@ Pub/Sub の OpenTelemetry 連携が付ける属性 `googclient_traceparent` は�
 
 ### ERROR 以上のログに分類と dedup 用の fingerprint を付ける
 
-Cloud Error Reporting は severity=ERROR かつ `stack_trace` のあるログを自動でグループ化しますが、例外を伴わない ERROR や、メッセージに可変部 (ID、件数、引用文字列) が多いエラーはグループ化に頼れません。`Initializer(error_event=...)` を指定すると、JSON 形式で severity ERROR 以上のログに次のフィールドを付けます。既定では付けません。
+Cloud Error Reporting は severity=ERROR かつ `stack_trace` のあるログを自動でグループ化しますが、例外を伴わない ERROR や、メッセージに可変部 (ID、件数、引用文字列) が多いエラーはグループ化に頼れません。`setup_logging(error_event=...)` を指定すると、JSON 形式で severity ERROR 以上のログに次のフィールドを付けます。既定では付けません。
 
 | フィールド | 内容 |
 |---|---|
@@ -276,9 +301,9 @@ Cloud Error Reporting は severity=ERROR かつ `stack_trace` のあるログを
 
 ```python
 import logging
-from gnlog import Initializer
+from gnlog.google.cloud_run import setup_logging
 
-Initializer(error_event="app_error", surface="worker")
+setup_logging(error_event="app_error", surface="worker")
 logger = logging.getLogger(__name__)
 
 logger.error("order %s not found", 123, extra={"error_type": "validation", "operation": "orders.get"})
@@ -332,40 +357,55 @@ level_str = level.to_str(logging.INFO)  # => "INFO"
 #### ロガーごとに異なる設定を適用
 
 ```python
-from gnlog import Initializer
 import logging
+from gnlog.google.cloud_run import setup_logging
 
-initializer = Initializer(log_level=logging.INFO)
+setup = setup_logging(log_level=logging.INFO)
 
 # 特定のロガーは DEBUG レベルで出力
-debug_logger = initializer.apply("debug_module", log_level=logging.DEBUG)
+debug_logger = setup.apply("debug_module", log_level=logging.DEBUG)
 
 # 親ロガーへの伝播を無効化
-isolated_logger = initializer.apply("isolated", propagate=False)
+isolated_logger = setup.apply("isolated", propagate=False)
 
 # 既存のハンドラをクリアして新規追加
-clean_logger = initializer.apply("clean", clear_handlers=True, add_handler=True)
+clean_logger = setup.apply("clean", clear_handlers=True, add_handler=True)
 ```
+
+#### 別の provider や独自の formatter を使う
+
+`setup_logging()` は共通部 `gnlog.output` の組み合わせです。formatter を差し替えたい場合や、別の provider の入口を作る場合は同じ部品を使えます。
+
+```python
+import logging
+from gnlog import output
+
+handler = output.stream_handler(MyFormatter())          # 任意の formatter で標準出力へ
+# handler = output.text_handler()                        # テキスト形式 (LOG_FILE_PATH / LOG_FORMAT を読む)
+setup = output.install(handler, log_level=logging.INFO)  # ContextFilter を付けてルートロガーに組み込む
+```
+
+出力形式の決定は `output.use_json_output(json, default=...)` で、`default` に「その環境で JSON にするか」の判定 (Cloud Run なら `is_cloud_run`) を渡します。
 
 #### 非 ASCII 文字を escape せずに出力する
 
 JSON 形式では、既定で非 ASCII 文字 (日本語など) を `\uXXXX` に escape して出力します (python-json-logger の既定と同じ)。Cloud Logging は JSON を復号して表示するので閲覧上の違いはありませんが、標準出力を直接読む場面 (ローカル実行、`docker logs`、CI のログ) では読みにくく、grep もできません。`json_ensure_ascii=False` を指定すると、そのまま出力します。
 
 ```python
-from gnlog import Initializer
+from gnlog.google.cloud_run import setup_logging
 
-initializer = Initializer(json_ensure_ascii=False)
+setup_logging(json_ensure_ascii=False)
 ```
 
 #### 診断出力を抑止する
 
-`Initializer()` と `apply()` は、初期化の過程 (ハンドラのクリアやロガーの状態) を診断用に標準エラー出力へ出力します。Cloud Run では標準エラー出力も Cloud Logging に取り込まれ、severity を持たない構造化されていないエントリとして混じります。不要な場合は `verbose=False` を指定してください。
+`setup_logging()` と `apply()` は、初期化の過程 (ハンドラのクリアやロガーの状態) を診断用に標準エラー出力へ出力します。Cloud Run では標準エラー出力も Cloud Logging に取り込まれ、severity を持たない構造化されていないエントリとして混じります。不要な場合は `verbose=False` を指定してください。
 
 ```python
-from gnlog import Initializer
+from gnlog.google.cloud_run import setup_logging
 
-initializer = Initializer(verbose=False)
-logger = initializer.apply(__name__)
+setup = setup_logging(verbose=False)
+logger = setup.apply(__name__)
 ```
 
 ### google-cloud-logging の Client.setup_loggingとの併用は不要
@@ -392,7 +432,7 @@ client.setup_logging()
 
 ### 不要な理由
 
-gnlog.Initializer と google.cloud.logging.Client().setup_logging のどちらも logging.root に自身の用意したハンドラを追加するためです。 log.Initializer を呼び出す前に setup_logging を呼び出した場合は、setup_logging の追加したハンドラを削除します。setup_logging を後で呼び出した場合はハンドラが追加されますが、その場合は一つのログ出力の呼び出しに対して複数のハンドラが動作するので、複数のログエントリが作成されます。
+`gnlog.google.cloud_run.setup_logging()` と `google.cloud.logging.Client().setup_logging()` のどちらも `logging.root` に自身の用意したハンドラを追加するためです (名前が同じですが別のものです)。gnlog の `setup_logging()` を呼び出す前に Client の `setup_logging()` を呼び出した場合は、Client が追加したハンドラを削除します。Client の `setup_logging()` を後で呼び出した場合はハンドラが追加されますが、その場合は一つのログ出力の呼び出しに対して複数のハンドラが動作するので、複数のログエントリが作成されます。
 
 詳しくは py-gn-log の前身を作成した際の以下のPRを参照してください。
 https://github.com/tengine/cloud-run-services-fastapi-example/pull/7
