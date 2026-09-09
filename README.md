@@ -228,7 +228,7 @@ logger.error("order %s not found", 123, extra={"error_type": "validation", "oper
    2. 引用文字列を `<str>` に。二重引用符で囲まれた改行を含まない文字列 (`"[^"\n]*"`)、または単一引用符で囲まれた改行を含まない文字列のうち前後が ASCII の英数字・下線でないもの (`(?<![0-9A-Za-z_])'[^'\n]*'(?![0-9A-Za-z_])`。`can't` のようなアポストロフィは引用符とみなさない)
    3. 数値を `<num>` に。ASCII の数字の並びで、3 桁ごとのカンマ区切り・小数部・指数部を含めて 1 つの数値とし、前後は ASCII の単語境界で区切る (`\b\d+(?:,\d{3})*(?:\.\d+)?(?:[eE][+-]?\d+)?\b`。`\b` と `\d` は ASCII の意味)
 2. 先頭 300 文字に切り詰める
-3. `surface`、`operation`、`error_type`、正規化したメッセージを `|` で連結する (`surface` 未指定なら空文字)
+3. `surface`、`operation`、`error_type`、正規化したメッセージのそれぞれについて `\` を `\\` に、`|` を `\|` に escape してから、`|` で連結する (`surface` 未指定なら空文字)
 4. UTF-8 でエンコードした SHA-1 の 16 進表現の先頭 16 文字を取る
 
 ```python
@@ -239,6 +239,9 @@ normalize_message('order 123 for "alice" not found')
 
 build_fingerprint("worker", "orders.create", "validation", "order 123 missing")
 # => sha1("worker|orders.create|validation|order <num> missing")[:16]
+
+build_fingerprint("worker|orders", "create", "validation", "boom")
+# => sha1("worker\|orders|create|validation|boom")[:16]   (値の | は escape される)
 ```
 
 ### ログレベルのユーティリティ関数

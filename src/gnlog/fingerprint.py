@@ -17,7 +17,8 @@ Cloud Error Reporting は severity=ERROR かつ stack_trace のあるログを�
     3. 数値を ``<num>`` に置き換える。ASCII の数字の並びで、3 桁ごとのカンマ区切り・小数部・
        指数部 (e10, E-3 など) を含めて 1 つの数値とし、前後は ASCII の単語境界で区切る
     4. 先頭 300 文字に切り詰める
-    5. ``surface | operation | error_type | 正規化したメッセージ`` を ``|`` で連結し、
+    5. ``surface``、``operation``、``error_type``、正規化したメッセージのそれぞれについて
+       ``\\`` を ``\\\\`` に、``|`` を ``\\|`` に escape してから ``|`` で連結し、
        UTF-8 の SHA-1 の 16 進表現の先頭 16 文字を fingerprint とする
 """
 
@@ -68,6 +69,11 @@ def normalize_message(message: str, max_length: int = MAX_MESSAGE_LENGTH) -> str
     return normalized[:max_length]
 
 
+def _escape_component(value: str) -> str:
+    """連結の区切り文字 ``|`` が値に含まれていても区切りと区別できるように escape する"""
+    return value.replace("\\", "\\\\").replace("|", "\\|")
+
+
 def build_fingerprint(
     surface: str, operation: str, error_type: str, message: str
 ) -> str:
@@ -80,8 +86,9 @@ def build_fingerprint(
         message: ログメッセージ。``normalize_message()`` で正規化してから使う
 
     Returns:
-        ``surface|operation|error_type|正規化したメッセージ`` の UTF-8 SHA-1 の
-        16 進表現の先頭 16 文字
+        ``surface|operation|error_type|正規化したメッセージ`` (各要素は ``\\`` と ``|`` を
+        escape 済み) の UTF-8 SHA-1 の 16 進表現の先頭 16 文字
     """
-    source = "|".join([surface, operation, error_type, normalize_message(message)])
+    components = [surface, operation, error_type, normalize_message(message)]
+    source = "|".join(_escape_component(c) for c in components)
     return hashlib.sha1(source.encode("utf-8")).hexdigest()[:FINGERPRINT_LENGTH]

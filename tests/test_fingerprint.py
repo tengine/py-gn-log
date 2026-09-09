@@ -108,6 +108,22 @@ class TestBuildFingerprint:
         }
         assert build_fingerprint(**base) != build_fingerprint(**{**base, **kwargs})
 
+    def test_delimiter_in_values_does_not_collide(self):
+        """値に区切り文字 | が含まれていても、別の組み合わせと同じ値にならないこと"""
+        a = build_fingerprint("worker|orders", "create", "validation", "boom")
+        b = build_fingerprint("worker", "orders|create", "validation", "boom")
+        assert a != b
+
+    def test_escapes_backslash_and_delimiter(self):
+        """規則どおり \\ と | を escape してから連結すること"""
+        expected = hashlib.sha1(
+            "worker\\|orders|create|validation|a\\\\b".encode()
+        ).hexdigest()[:16]
+        assert (
+            build_fingerprint("worker|orders", "create", "validation", "a\\b")
+            == expected
+        )
+
     def test_is_first_16_hex_chars_of_sha1(self):
         """規則どおり、連結文字列の UTF-8 SHA-1 の先頭 16 文字であること"""
         expected = hashlib.sha1(
