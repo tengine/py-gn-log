@@ -54,7 +54,14 @@ def get() -> Mapping[str, Any]:
     return _context.get()
 
 
-def set(**values: Any) -> None:
+def _merge_values(
+    mapping: Mapping[str, Any] | None, values: dict[str, Any]
+) -> dict[str, Any]:
+    """位置引数の Mapping とキーワード引数を 1 つの dict にまとめる (キーワード引数が優先)"""
+    return {**(mapping or {}), **values}
+
+
+def set(mapping: Mapping[str, Any] | None = None, /, **values: Any) -> None:
     """現在の文脈に値を追加または上書きする
 
     ``bind()`` と違い、明示的に ``clear()`` するか、呼び出し元の Context が
@@ -62,13 +69,16 @@ def set(**values: Any) -> None:
     使い方を想定しています。
 
     Args:
+        mapping: 文脈に置くキーと値の Mapping。``logging.googleapis.com/trace`` のように
+            Python の識別子にならないキーを置くときに使う
         **values: 文脈に置くキーと値。キーは JSON 出力のキー名になる
 
     Raises:
         ValueError: LogRecord の属性名と同じキーが含まれる場合
     """
-    _validate_keys(values)
-    _context.set(MappingProxyType({**_context.get(), **values}))
+    merged = _merge_values(mapping, values)
+    _validate_keys(merged)
+    _context.set(MappingProxyType({**_context.get(), **merged}))
 
 
 def clear() -> None:
@@ -77,7 +87,7 @@ def clear() -> None:
 
 
 @contextmanager
-def bind(**values: Any) -> Iterator[None]:
+def bind(mapping: Mapping[str, Any] | None = None, /, **values: Any) -> Iterator[None]:
     """with ブロックの間だけ文脈に値を追加する
 
     ブロックを抜けると、ここで置いたキーだけを入る前の状態に戻します (例外で抜けた
@@ -85,6 +95,7 @@ def bind(**values: Any) -> Iterator[None]:
     入れ子にでき、内側の値が同じキーを上書きします。
 
     Args:
+        mapping: 文脈に置くキーと値の Mapping。Python の識別子にならないキーを置くときに使う
         **values: 文脈に置くキーと値。キーは JSON 出力のキー名になる
 
     Raises:
@@ -95,6 +106,7 @@ def bind(**values: Any) -> Iterator[None]:
         ...     logger.info("...")  # trace_id が付く
         >>> logger.info("...")      # trace_id は付かない
     """
+    values = _merge_values(mapping, values)
     _validate_keys(values)
     before = _context.get()
     _context.set(MappingProxyType({**before, **values}))

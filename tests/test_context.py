@@ -70,6 +70,24 @@ class TestContextApi:
             assert context.get()["trace_id"] == "inside"
         assert context.get()["trace_id"] == "before"
 
+    def test_mapping_argument_allows_non_identifier_keys(self):
+        """位置引数の Mapping で、識別子にならないキーも置けること"""
+        context.set({"logging.googleapis.com/trace": "projects/p/traces/t"})
+        with context.bind({"a/b": 1}, site="tokyo"):
+            assert dict(context.get()) == {
+                "logging.googleapis.com/trace": "projects/p/traces/t",
+                "a/b": 1,
+                "site": "tokyo",
+            }
+        assert dict(context.get()) == {
+            "logging.googleapis.com/trace": "projects/p/traces/t"
+        }
+
+    def test_keyword_overrides_mapping(self):
+        """Mapping とキーワード引数に同じキーがあればキーワード引数が優先されること"""
+        context.set({"site": "osaka"}, site="tokyo")
+        assert context.get()["site"] == "tokyo"
+
     def test_set_persists_until_clear(self):
         """set() した値は clear() するまで残ること"""
         context.set(trace_id="t1")
