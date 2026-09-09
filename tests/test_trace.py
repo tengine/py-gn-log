@@ -143,6 +143,37 @@ class TestBindAndSet:
         assert trace.current() is None
         assert "logging.googleapis.com/trace" not in context.get()
 
+    def test_nested_bind_does_not_keep_outer_span(self, capsys):
+        """内側の trace に span_id / sampled が無くても、外側の値がログに残らないこと"""
+        logging.root.handlers.clear()
+        try:
+            Initializer(log_level=logging.INFO, verbose=False, json=True)
+            logger = logging.getLogger("test.trace.nested")
+            outer = TraceContext("a" * 32, SPAN_HEX, True)
+            inner = TraceContext("b" * 32)
+            with trace.bind(outer, project_id="p"), trace.bind(inner, project_id="p"):
+                logger.info("inner")
+            with trace.bind(outer, project_id="p"):
+                logger.info("outer again")
+        finally:
+            logging.root.handlers.clear()
+
+        lines = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+        assert lines[0]["logging.googleapis.com/trace"].endswith("b" * 32)
+        assert "logging.googleapis.com/spanId" not in lines[0]
+        assert "logging.googleapis.com/trace_sampled" not in lines[0]
+        # 外側に戻れば外側の span が復元される
+        assert lines[1]["logging.googleapis.com/spanId"] == SPAN_HEX
+
+    def test_second_set_replaces_all_fields(self):
+        """set() を重ねたとき、新しい trace に無い spanId / trace_sampled が前の値のまま残らないこと"""
+        trace.set(TraceContext("a" * 32, SPAN_HEX, True), project_id="p")
+        trace.set(TraceContext("c" * 32), project_id="p")
+        fields = context.get()
+        assert fields["logging.googleapis.com/trace"].endswith("c" * 32)
+        assert fields["logging.googleapis.com/spanId"] is None
+        assert fields["logging.googleapis.com/trace_sampled"] is None
+
     def test_bind_with_none_does_nothing(self):
         """trace が None ならブロック内でも何も置かないこと"""
         with trace.bind(None, project_id="p"):

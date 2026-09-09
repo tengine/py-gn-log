@@ -194,6 +194,15 @@ def log_fields(trace: TraceContext, project_id: str | None = None) -> dict[str, 
     return fields
 
 
+def _context_fields(trace: TraceContext, project_id: str | None) -> dict[str, Any]:
+    """文脈に置くフィールド。不明な spanId / trace_sampled は None にして、
+    外側の bind() や前の set() の値が残らないようにする (None は ContextFilter が注入しない)"""
+    fields = log_fields(trace, project_id)
+    if not fields:
+        return {}
+    return {SPAN_ID_KEY: None, TRACE_SAMPLED_KEY: None, **fields}
+
+
 def current() -> TraceContext | None:
     """現在の文脈の trace を返す (無ければ None)"""
     return _current.get()
@@ -209,7 +218,7 @@ def set(trace: TraceContext | None, project_id: str | None = None) -> None:
     if trace is None:
         return
     _current.set(trace)
-    context.set(log_fields(trace, project_id))
+    context.set(_context_fields(trace, project_id))
 
 
 def clear() -> None:
@@ -238,7 +247,7 @@ def bind(trace: TraceContext | None, project_id: str | None = None) -> Iterator[
         return
     token = _current.set(trace)
     try:
-        with context.bind(log_fields(trace, project_id)):
+        with context.bind(_context_fields(trace, project_id)):
             yield
     finally:
         _current.reset(token)

@@ -126,6 +126,14 @@ class TestContextFilter:
         assert record.trace_id == "t1"  # type: ignore[attr-defined]
         assert record.site == "tokyo"  # type: ignore[attr-defined]
 
+    def test_none_value_is_not_injected(self):
+        """値が None のキーは record に注入しないこと"""
+        record = _record()
+        with context.bind(trace_id="t1", site=None):
+            ContextFilter().filter(record)
+        assert record.trace_id == "t1"  # type: ignore[attr-defined]
+        assert not hasattr(record, "site")
+
     def test_record_attribute_takes_precedence(self):
         """record にすでにある属性 (extra= で渡したもの) を上書きしないこと"""
         record = _record()

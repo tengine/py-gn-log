@@ -125,7 +125,9 @@ class ContextFilter(logging.Filter):
     """現在の文脈を LogRecord の属性として注入する Filter
 
     record にすでに同名の属性がある場合 (``extra=`` で明示的に渡された場合) は
-    そちらを優先し、上書きしません。
+    そちらを優先し、上書きしません。値が ``None`` のキーは注入しません — 文脈上で
+    「そのキーは無い」ことを表すために使えます (入れ子の ``bind()`` で外側の値を
+    一時的に外したいときなど)。
 
     ロガーに付けた Filter は伝播してきた record には適用されないため、この Filter は
     handler に付けてください (``Initializer`` は自身の handler に付けます)。
@@ -133,6 +135,6 @@ class ContextFilter(logging.Filter):
 
     def filter(self, record: logging.LogRecord) -> bool:
         for key, value in _context.get().items():
-            if not hasattr(record, key):
+            if value is not None and not hasattr(record, key):
                 setattr(record, key, value)
         return True
