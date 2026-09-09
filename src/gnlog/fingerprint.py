@@ -41,10 +41,19 @@ FINGERPRINT_LENGTH = 16
 _UUID_PATTERN = re.compile(
     r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
 )
+# 引用文字列の区切り文字。正規表現の中でエスケープが重なって読みにくくならないよう、
+# 定数にして f-string で組み立てる。
+DOUBLE_QUOTE = '"'
+APOSTROPHE = "'"
+# ASCII の英数字・下線 (他言語の正規表現と意味を揃えるため \w は使わない)
+_ASCII_WORD_CHAR = "[0-9A-Za-z_]"
 # 単一引用符は、開き引用符の直前が英数字・下線でないときだけ引用文字列の開始とみなす
 # (can't / won't のようなアポストロフィを引用符と誤認しないため)。閉じ引用符側は
 # 制限しない ('bob's のような所有格を引用文字列として扱えるようにするため)。
-_QUOTED_PATTERN = re.compile(r"\"[^\"\n]*\"|(?<![0-9A-Za-z_])'[^'\n]*'")
+_QUOTED_PATTERN = re.compile(
+    rf"{DOUBLE_QUOTE}[^{DOUBLE_QUOTE}\n]*{DOUBLE_QUOTE}"
+    rf"|(?<!{_ASCII_WORD_CHAR}){APOSTROPHE}[^{APOSTROPHE}\n]*{APOSTROPHE}"
+)
 # 数値は桁区切りのカンマ・小数部・指数部を含めて 1 つにまとめる。
 # \b と \d を ASCII に限定し、他言語 (JavaScript 等) の正規表現と同じ意味にする。
 _NUMBER_PATTERN = re.compile(r"\b\d+(?:,\d{3})*(?:\.\d+)?(?:[eE][+-]?\d+)?\b", re.ASCII)
