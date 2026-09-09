@@ -35,6 +35,8 @@ class TestNormalizeMessage:
             ),
             ("user 'bob' can't login", "user <str> can't login"),
             ("it's 'quoted'.", "it's <str>."),
+            # 閉じ引用符の直後に英数字が続いても引用文字列として扱う (所有格)
+            ("user 'bob's account is locked", "user <str>s account is locked"),
             # 桁区切りと指数部を含めて 1 つの数値
             ("count 1,234 rows", "count <num> rows"),
             ("count 9,876,543 rows", "count <num> rows"),
