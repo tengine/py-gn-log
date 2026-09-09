@@ -11,3 +11,7 @@ __pycache__/
 # pytest-cov
 .coverage
 htmlcov/
+
+# review-triage の記録と設定 (ローカルで保持し、コミットしない)
+.claude/review-triage.yaml
+docs/review-triages/
