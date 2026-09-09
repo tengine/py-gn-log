@@ -263,6 +263,20 @@ class TestJsonFormatter:
             "worker", "orders.get", "validation", "order 123 not found"
         )
 
+    def test_error_fields_emit_same_string_as_hashed_for_non_str_values(self):
+        """operation / error_type が文字列でなくても、出力と fingerprint の入力が同じ文字列になること"""
+        log_dict = self._format_error_fields(
+            error_event="app_error",
+            surface="worker",
+            extra={"error_type": 42, "operation": ["a", "b"]},
+        )
+        assert log_dict["error_type"] == "42"
+        assert log_dict["operation"] == "['a', 'b']"
+        # 出力された JSON の値だけから fingerprint を再計算できる
+        assert log_dict["fingerprint"] == build_fingerprint(
+            "worker", log_dict["operation"], log_dict["error_type"], log_dict["message"]
+        )
+
     def test_error_fields_do_not_overwrite_explicit_event_and_fingerprint(self):
         """extra で渡した event / fingerprint を上書きしないこと"""
         log_dict = self._format_error_fields(

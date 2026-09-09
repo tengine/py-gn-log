@@ -150,8 +150,10 @@ class JsonFormatter(OriginalJsonFormatter):
             record: Python の LogRecord オブジェクト
         """
         log_data.setdefault(ERROR_EVENT_KEY, self._error_event)
-        error_type = log_data.get(ERROR_TYPE_KEY) or ERROR_TYPE_UNKNOWN
-        operation = log_data.get(OPERATION_KEY) or record.name
+        # JSON に出力する値と fingerprint の入力を同じ文字列にする
+        # (出力された JSON から fingerprint を再計算できるようにするため)
+        error_type = str(log_data.get(ERROR_TYPE_KEY) or ERROR_TYPE_UNKNOWN)
+        operation = str(log_data.get(OPERATION_KEY) or record.name)
         log_data[ERROR_TYPE_KEY] = error_type
         log_data[OPERATION_KEY] = operation
         if FINGERPRINT_KEY not in log_data:
@@ -159,5 +161,5 @@ class JsonFormatter(OriginalJsonFormatter):
             if not isinstance(message, str):
                 message = record.getMessage()
             log_data[FINGERPRINT_KEY] = fingerprint.build_fingerprint(
-                self._surface, str(operation), str(error_type), message
+                self._surface, operation, error_type, message
             )
