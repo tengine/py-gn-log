@@ -10,7 +10,8 @@ import logging.handlers
 import os
 import sys
 
-from . import context, json_formatter, level
+from . import context, level
+from .google import cloud_logging
 
 # ローカル環境用のログフォーマット
 # 参考: https://docs.python.org/3/library/logging.html#formatter-objects
@@ -144,7 +145,7 @@ class Initializer:
                 かどうかで自動判定する
             error_event: 指定すると、JSON 形式で severity ERROR 以上のログに分類と
                 dedup 用のフィールド (event / error_type / operation / fingerprint) を
-                付ける。詳しくは json_formatter.JsonFormatter を参照。None なら付けない
+                付ける。詳しくは google.cloud_logging.JsonFormatter を参照。None なら付けない
             surface: fingerprint の入力に使うサービスやコンポーネントの名前。
                 error_event 指定時のみ使われる
         """
@@ -159,7 +160,7 @@ class Initializer:
             # JSON フォーマットで標準出力に出力 (Cloud Logging 向け)
             handler = logging.StreamHandler(sys.stdout)
             handler.setFormatter(
-                json_formatter.JsonFormatter(
+                cloud_logging.JsonFormatter(
                     labels=labels,
                     json_ensure_ascii=json_ensure_ascii,
                     error_event=error_event,

@@ -4,7 +4,7 @@ import pytest
 
 from gnlog.fingerprint import build_fingerprint
 from gnlog.init import LOCAL_LOG_FORMAT, Initializer, is_cloud_run, use_json_output
-from gnlog.json_formatter import JsonFormatter
+from gnlog.google.cloud_logging import JsonFormatter
 
 
 class TestInitializer:
@@ -46,7 +46,7 @@ class TestInitializer:
         assert isinstance(initializer.handler, logging.StreamHandler)
         assert initializer.log_level_default == logging.INFO
         # ローカル環境では JsonFormatter は使われないこと
-        from gnlog.json_formatter import JsonFormatter
+        from gnlog.google.cloud_logging import JsonFormatter
 
         assert not isinstance(initializer.handler.formatter, JsonFormatter)
 
@@ -60,7 +60,7 @@ class TestInitializer:
 
         assert isinstance(initializer.handler, logging.StreamHandler)
         # JsonFormatter が設定されていることを確認
-        from gnlog.json_formatter import JsonFormatter
+        from gnlog.google.cloud_logging import JsonFormatter
 
         assert isinstance(initializer.handler.formatter, JsonFormatter)
 
@@ -75,7 +75,7 @@ class TestInitializer:
 
         assert isinstance(initializer.handler, logging.StreamHandler)
         # JsonFormatter が設定されていることを確認
-        from gnlog.json_formatter import JsonFormatter
+        from gnlog.google.cloud_logging import JsonFormatter
 
         assert isinstance(initializer.handler.formatter, JsonFormatter)
 
@@ -93,7 +93,7 @@ class TestInitializer:
 
         assert isinstance(initializer.handler, logging.StreamHandler)
         # JsonFormatter が設定されていることを確認
-        from gnlog.json_formatter import JsonFormatter
+        from gnlog.google.cloud_logging import JsonFormatter
 
         assert isinstance(initializer.handler.formatter, JsonFormatter)
 

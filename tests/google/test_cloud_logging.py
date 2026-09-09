@@ -2,7 +2,7 @@ import json
 import logging
 
 from gnlog.fingerprint import build_fingerprint
-from gnlog.json_formatter import JsonFormatter
+from gnlog.google.cloud_logging import JsonFormatter
 
 
 class TestJsonFormatter:
