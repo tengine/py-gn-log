@@ -194,6 +194,73 @@ with context.bind(trace_id="4bf92f35"):
 
 `concurrent.futures.ThreadPoolExecutor` を使う場合も同様に `executor.submit(ctx.run, work)` のように渡します。
 
+### Cloud Trace と連携して全ログ行に trace を付ける
+
+複数サービスにまたがる処理のログを串刺しにするには、独自の ID ではなく Cloud Trace の仕組みに寄せるのが自然です。Cloud Run はリクエストごとに `X-Cloud-Trace-Context` ヘッダ (と W3C の `traceparent`) を付け、Cloud Logging は JSON の特殊フィールド `logging.googleapis.com/trace` (`projects/<PROJECT_ID>/traces/<TRACE_ID>`)、`logging.googleapis.com/spanId`、`logging.googleapis.com/trace_sampled` を認識してログエントリを trace に紐付けます (Logs Explorer で同じ trace のログを横断表示でき、Cloud Trace とも繋がります)。
+
+`gnlog.trace` は、受信ヘッダから trace を取り出して上の文脈 (`gnlog.context`) に特殊フィールドとして置く関数と、他サービスを呼び出すときに現在の trace をヘッダとして組み立てる関数を提供します。
+
+```python
+import logging
+from gnlog import Initializer, trace
+
+Initializer()
+logger = logging.getLogger(__name__)
+
+# 受信ヘッダから trace を取り出し、ブロックの間だけ全ログ行に付ける
+with trace.bind_headers(request.headers, project_id="my-project"):
+    logger.info("処理開始")
+    # {"message": "処理開始",
+    #  "logging.googleapis.com/trace": "projects/my-project/traces/4bf92f3577b34da6a3ce929d0e0e4736",
+    #  "logging.googleapis.com/spanId": "00f067aa0ba902b7",
+    #  "logging.googleapis.com/trace_sampled": true, ...}
+
+    # 下流のサービスを呼ぶときは現在の trace をヘッダに載せる
+    httpx.post(url, headers=trace.to_headers())
+```
+
+- プロジェクト ID は引数 `project_id`、無ければ環境変数 `GOOGLE_CLOUD_PROJECT` から取ります。**どちらにも無い場合は trace のフィールドを付けません** (既定値で本番のプロジェクト ID を持たないため)。その場合も `trace.current()` と `trace.to_headers()` は動作するので、下流への引き継ぎはできます。
+- `traceparent` と `X-Cloud-Trace-Context` の両方があれば `traceparent` を優先します。ヘッダ名の大文字小文字は区別しません。
+- `X-Cloud-Trace-Context` の SPAN_ID (10 進) は、Cloud Logging の `spanId` に合わせて 16 桁の 16 進に変換します。
+- `trace.to_headers()` は、`span_id` と `sampled` の両方が分かっているときだけ `traceparent` を付けます。W3C の `traceparent` は「不明」を表せないためで、どちらかが不明なら `X-Cloud-Trace-Context` だけを付けます (`;o=` や SPAN_ID の省略で不明を表せます)。
+- `trace.set(trace_context, project_id=...)` / `trace.clear()` で明示的に置いて消すこともできます。`trace.parse_traceparent()` / `trace.parse_cloud_trace_context()` / `trace.from_headers()` は解釈だけを行います。
+
+#### FastAPI / Starlette の middleware の例
+
+このライブラリは Web フレームワーク向けの middleware を同梱していません。次のように数行で書けます。
+
+```python
+from fastapi import FastAPI, Request
+from gnlog import trace
+
+app = FastAPI()
+
+@app.middleware("http")
+async def bind_trace(request: Request, call_next):
+    with trace.bind_headers(request.headers):  # project_id は GOOGLE_CLOUD_PROJECT から
+        return await call_next(request)
+```
+
+`asyncio` のタスクは生成時点の文脈を引き継ぐので、ハンドラの中で `asyncio.create_task()` した処理にも trace が付きます。スレッドをまたぐ場合は上の「スレッドをまたぐ場合」と同じく `contextvars.copy_context()` を使ってください。
+
+#### HTTP 以外の経路 (Pub/Sub、Cloud Run Jobs、キュー) で trace を運ぶ
+
+受信ヘッダが無い経路では、呼び出し側がペイロードに trace を載せ、受け側が復元します。このライブラリでは次の慣習を推奨します。
+
+- 呼び出し側は `trace.to_headers()` の内容を、Pub/Sub ならメッセージの属性 (attributes)、Cloud Run Jobs なら環境変数やジョブの引数、キューならペイロードのフィールドとして、**ヘッダ名と同じキー名** (`traceparent` / `X-Cloud-Trace-Context`) で載せる。
+- 受け側はその Mapping をそのまま `trace.bind_headers()` (または `trace.from_headers()`) に渡す。ヘッダ名と同じキー名にしておけば、経路によらず同じ関数で復元できる。
+
+```python
+# 発行側
+publisher.publish(topic, data, **trace.to_headers())
+
+# 購読側 (Pub/Sub の push 配信や Cloud Run Jobs のワーカー)
+with trace.bind_headers(message.attributes):
+    handle(message)
+```
+
+Pub/Sub の OpenTelemetry 連携が付ける属性 `googclient_traceparent` は読みません。必要なら `trace.parse_traceparent(message.attributes["googclient_traceparent"])` の結果を `trace.bind()` に渡してください。
+
 ### ERROR 以上のログに分類と dedup 用の fingerprint を付ける
 
 Cloud Error Reporting は severity=ERROR かつ `stack_trace` のあるログを自動でグループ化しますが、例外を伴わない ERROR や、メッセージに可変部 (ID、件数、引用文字列) が多いエラーはグループ化に頼れません。`Initializer(error_event=...)` を指定すると、JSON 形式で severity ERROR 以上のログに次のフィールドを付けます。既定では付けません。

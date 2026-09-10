@@ -5,7 +5,7 @@ gnlog - Groovenauts ログユーティリティパッケージ
 環境変数による設定やCloud Run向けのJSON出力をサポートします。
 """
 
-from . import context, fingerprint, level
+from . import context, fingerprint, level, trace
 from .init import Initializer, is_cloud_run, print_loggers, use_json_output
 
 __all__ = [
@@ -15,5 +15,6 @@ __all__ = [
     "is_cloud_run",
     "level",
     "print_loggers",
+    "trace",
     "use_json_output",
 ]
