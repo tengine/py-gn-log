@@ -6,6 +6,6 @@ gnlog - Groovenauts ログユーティリティパッケージ
 """
 
 from . import level
-from .init import Initializer, print_loggers
+from .init import Initializer, is_cloud_run, print_loggers, use_json_output
 
-__all__ = ["Initializer", "level", "print_loggers"]
+__all__ = ["Initializer", "is_cloud_run", "level", "print_loggers", "use_json_output"]

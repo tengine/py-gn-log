@@ -41,6 +41,18 @@ logger.error("An error occurred")
 
 `__name__` は呼び出すモジュールの名前(この場合は .py ファイルの名前から拡張子を除いたもの)を表す特殊な変数です。詳しくは [Python チュートリアル » 6. モジュール](https://docs.python.org/ja/3/tutorial/modules.html) あるいは [Python 言語リファレンス » 3. データモデル » module.\_\_name\_\_](https://docs.python.org/ja/3/reference/datamodel.html#module.__name__) を参照してください。
 
+### ルートロガーの level について
+
+`Initializer()` はハンドラの level とあわせてルートロガーの level も設定します (`logging.basicConfig(level=...)` と同じ振る舞い)。そのため `apply()` していないモジュールのロガー (`logging.getLogger(__name__)` で取得しただけのもの) からの INFO / DEBUG も出力されます。
+
+ルートロガーの level を変更したくない場合は `set_root_level=False` を指定してください。この場合、ルートロガーの level は Python の既定 (WARNING) のままなので、`apply()` していないロガーの INFO / DEBUG は出力されません。
+
+```python
+from gnlog import Initializer
+
+initializer = Initializer(set_root_level=False)
+```
+
 ### 環境変数による設定
 
 #### 環境変数の使われ方
@@ -48,9 +60,12 @@ logger.error("An error occurred")
 ```mermaid
 flowchart LR
     S(start) --> A[環境変数 LOG_LEVEL]
-    A --> B{環境変数 K_SERVICE}
-    B -->|通常Cloud Runによって指定| C[標準出力 Cloud Logging用JSON形式]
-    B --> |指定なし| D[環境変数 LOG_FORMAT]
+    A --> J{環境変数 GNLOG_FORMAT}
+    J -->|json| C[標準出力 Cloud Logging用JSON形式]
+    J -->|text| D[環境変数 LOG_FORMAT]
+    J -->|指定なし| B{環境変数 K_SERVICE など Cloud Run の環境変数}
+    B -->|通常Cloud Runによって指定| C
+    B --> |指定なし| D
     D --> E{環境変数 LOG_FILE_PATH}
     E -->|指定あり| F[ファイル出力]
     E -->|指定なし| G[標準出力]
@@ -75,6 +90,25 @@ initializer = Initializer()
 logger = initializer.apply("my_app")
 ```
 
+#### 出力形式の明示的な指定
+
+環境変数 `GNLOG_FORMAT` で、Cloud Run 上かどうかによらず出力形式を指定できます。指定できる値は `json` (Cloud Logging 用の JSON 形式) と `text` (テキスト形式) です。それ以外の値を指定すると `Initializer()` が `ValueError` を送出します。未設定なら Cloud Run の環境変数の有無で自動判定します。
+
+```bash
+# ローカルや CI で Cloud Logging に取り込まれる形そのままの JSON 行を確認する
+export GNLOG_FORMAT=json
+```
+
+コードから指定する場合は `Initializer(json=True)` / `Initializer(json=False)` を使います。引数は環境変数より優先されます。
+
+```python
+from gnlog import Initializer
+
+initializer = Initializer(json=True)
+```
+
+なお、環境変数 `LOG_FORMAT` はテキスト形式の **format 文字列** を指定するものです。`LOG_FORMAT=json` のように形式名を設定すると format 文字列として解釈され `ValueError` になります。形式の切り替えには `GNLOG_FORMAT` を使ってください。
+
 #### ログファイルへの出力
 
 環境変数 `LOG_FILE_PATH` でログファイルのパスを指定できます。
@@ -85,7 +119,7 @@ export LOG_FILE_PATH=/var/log/myapp.log
 
 #### ログフォーマットのカスタマイズ
 
-環境変数 `LOG_FORMAT` でログフォーマットを指定できます。
+環境変数 `LOG_FORMAT` でテキスト形式のログフォーマット (format 文字列) を指定できます。JSON 形式では使われません。
 
 ```bash
 export LOG_FORMAT="%(asctime)s [%(levelname)s] %(message)s"
@@ -150,6 +184,16 @@ isolated_logger = initializer.apply("isolated", propagate=False)
 
 # 既存のハンドラをクリアして新規追加
 clean_logger = initializer.apply("clean", clear_handlers=True, add_handler=True)
+```
+
+#### 非 ASCII 文字を escape せずに出力する
+
+JSON 形式では、既定で非 ASCII 文字 (日本語など) を `\uXXXX` に escape して出力します (python-json-logger の既定と同じ)。Cloud Logging は JSON を復号して表示するので閲覧上の違いはありませんが、標準出力を直接読む場面 (ローカル実行、`docker logs`、CI のログ) では読みにくく、grep もできません。`json_ensure_ascii=False` を指定すると、そのまま出力します。
+
+```python
+from gnlog import Initializer
+
+initializer = Initializer(json_ensure_ascii=False)
 ```
 
 #### 診断出力を抑止する

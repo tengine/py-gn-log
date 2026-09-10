@@ -1,6 +1,9 @@
 import logging
 
-from gnlog.init import LOCAL_LOG_FORMAT, Initializer, is_cloud_run
+import pytest
+
+from gnlog.init import LOCAL_LOG_FORMAT, Initializer, is_cloud_run, use_json_output
+from gnlog.json_formatter import JsonFormatter
 
 
 class TestInitializer:
@@ -17,6 +20,7 @@ class TestInitializer:
         明示的にクリアして状態を分離する。
         """
         logging.root.handlers.clear()
+        logging.root.setLevel(logging.WARNING)
         test_logger = logging.getLogger("test.logger")
         test_logger.handlers.clear()
         test_logger.propagate = True
@@ -92,6 +96,26 @@ class TestInitializer:
 
         assert isinstance(initializer.handler.formatter, JsonFormatter)
 
+    def test_initializer_passes_json_ensure_ascii_to_formatter(self, monkeypatch):
+        """json_ensure_ascii が JsonFormatter に渡されること"""
+        monkeypatch.setenv("K_SERVICE", "test-service")
+
+        initializer = Initializer(
+            log_level=logging.INFO, verbose=False, json_ensure_ascii=False
+        )
+
+        record = logging.LogRecord(
+            name="test",
+            level=logging.INFO,
+            pathname="test.py",
+            lineno=1,
+            msg="日本語",
+            args=(),
+            exc_info=None,
+        )
+        assert initializer.handler.formatter is not None
+        assert "日本語" in initializer.handler.formatter.format(record)
+
     def test_initializer_respects_log_level_parameter(self):
         """log_level パラメータが反映されること"""
         initializer = Initializer(log_level=logging.DEBUG)
@@ -162,6 +186,36 @@ class TestInitializer:
         assert len(logger.handlers) == 1
         assert logger.handlers[0] == initializer.handler
 
+    def test_root_level_follows_log_level_by_default(self):
+        """既定では apply() していないロガーの INFO も handler に届くこと"""
+        records: list[logging.LogRecord] = []
+
+        class Collector(logging.Handler):
+            def emit(self, record: logging.LogRecord) -> None:
+                records.append(record)
+
+        Initializer(log_level=logging.INFO, verbose=False)
+        collector = Collector()
+        logging.root.addHandler(collector)
+        try:
+            other = logging.getLogger("test.not_applied_module")
+            other.setLevel(logging.NOTSET)  # 親 (root) の level に従わせる
+            other.info("INFO from a module that was not applied")
+        finally:
+            logging.root.removeHandler(collector)
+
+        assert [r.getMessage() for r in records] == [
+            "INFO from a module that was not applied"
+        ]
+
+    def test_set_root_level_false_keeps_root_level(self):
+        """set_root_level=False ではルートロガーの level を変更しないこと"""
+        logging.root.setLevel(logging.WARNING)
+
+        Initializer(log_level=logging.DEBUG, verbose=False, set_root_level=False)
+
+        assert logging.root.level == logging.WARNING
+
     def test_verbose_default_prints_diagnostics_to_stderr(self, capsys):
         """既定 (verbose=True) では診断出力が標準エラー出力に出ること"""
         initializer = Initializer(log_level=logging.INFO)
@@ -185,6 +239,76 @@ class TestInitializer:
         captured = capsys.readouterr()
         assert captured.err == ""
         assert captured.out == ""
+
+
+class TestUseJsonOutput:
+    """use_json_output 関数と Initializer(json=...) のテスト"""
+
+    @pytest.fixture(autouse=True)
+    def _clean_env(self, monkeypatch):
+        for name in ("K_SERVICE", "CLOUD_RUN_JOB", "CLOUD_RUN_WORKER_POOL"):
+            monkeypatch.delenv(name, raising=False)
+        monkeypatch.delenv("GNLOG_FORMAT", raising=False)
+        monkeypatch.delenv("LOG_FILE_PATH", raising=False)
+        logging.root.handlers.clear()
+        yield
+        logging.root.handlers.clear()
+
+    def test_defaults_to_cloud_run_detection(self, monkeypatch):
+        """引数も環境変数もない場合は Cloud Run 上かどうかで決まること"""
+        assert use_json_output() is False
+        monkeypatch.setenv("K_SERVICE", "svc")
+        assert use_json_output() is True
+
+    def test_env_json_forces_json_outside_cloud_run(self, monkeypatch):
+        """GNLOG_FORMAT=json なら Cloud Run 外でも JSON になること"""
+        monkeypatch.setenv("GNLOG_FORMAT", "json")
+        assert use_json_output() is True
+        initializer = Initializer(log_level=logging.INFO, verbose=False)
+        assert isinstance(initializer.handler.formatter, JsonFormatter)
+
+    def test_env_text_forces_text_on_cloud_run(self, monkeypatch):
+        """GNLOG_FORMAT=text なら Cloud Run 上でもテキストになること"""
+        monkeypatch.setenv("K_SERVICE", "svc")
+        monkeypatch.setenv("GNLOG_FORMAT", "text")
+        assert use_json_output() is False
+        initializer = Initializer(log_level=logging.INFO, verbose=False)
+        assert not isinstance(initializer.handler.formatter, JsonFormatter)
+
+    def test_env_value_is_case_insensitive(self, monkeypatch):
+        """GNLOG_FORMAT の値は大文字小文字と前後の空白を区別しないこと"""
+        monkeypatch.setenv("GNLOG_FORMAT", " JSON ")
+        assert use_json_output() is True
+
+    def test_env_empty_is_treated_as_unset(self, monkeypatch):
+        """GNLOG_FORMAT が空文字なら未設定と同じ扱いになること"""
+        monkeypatch.setenv("GNLOG_FORMAT", "")
+        assert use_json_output() is False
+
+    def test_env_invalid_value_raises(self, monkeypatch):
+        """GNLOG_FORMAT が json / text 以外なら分かるメッセージで ValueError になること"""
+        monkeypatch.setenv("GNLOG_FORMAT", "yaml")
+        with pytest.raises(ValueError, match="GNLOG_FORMAT.*'json' or 'text'"):
+            use_json_output()
+
+    def test_argument_overrides_env_and_cloud_run(self, monkeypatch):
+        """引数 json は環境変数と Cloud Run 判定より優先されること"""
+        monkeypatch.setenv("K_SERVICE", "svc")
+        monkeypatch.setenv("GNLOG_FORMAT", "json")
+        assert use_json_output(False) is False
+        initializer = Initializer(log_level=logging.INFO, verbose=False, json=False)
+        assert not isinstance(initializer.handler.formatter, JsonFormatter)
+
+    def test_initializer_json_true_outside_cloud_run(self):
+        """Initializer(json=True) で Cloud Run 外でも JsonFormatter が使われること"""
+        initializer = Initializer(log_level=logging.INFO, verbose=False, json=True)
+        assert isinstance(initializer.handler.formatter, JsonFormatter)
+
+    def test_log_format_json_is_still_a_format_string(self, monkeypatch):
+        """LOG_FORMAT の意味は変えない (LOG_FORMAT=json は format 文字列として扱われ失敗する)"""
+        monkeypatch.setenv("LOG_FORMAT", "json")
+        with pytest.raises(ValueError):
+            Initializer(log_level=logging.INFO, verbose=False)
 
 
 class TestIsCloudRun:
