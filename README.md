@@ -16,6 +16,12 @@ uv add git+ssh://git@github.com/tengine/py-gn-log
 uv add git+ssh://git@github.com/tengine/py-gn-log --branch (ブランチ名)
 ```
 
+### 依存ライブラリの版について
+
+py-gn-log は [python-json-logger](https://github.com/nhairs/python-json-logger) に依存しており、動作確認した major に上限を付けて宣言しています (`python-json-logger>=4.0.0,<5`)。python-json-logger の major が上がったときは py-gn-log 側で互換性を確認してから上限を上げます。
+
+ロックファイルを持たず、Docker のビルドのたびに `pip install` で依存を解決する構成のプロジェクトでは、推移依存の版が変わって起動に失敗することを防ぐため、利用側でも `python-json-logger` の版を明示して固定することを推奨します。
+
 ## 使い方
 
 ### 基本的な使い方
@@ -144,6 +150,17 @@ isolated_logger = initializer.apply("isolated", propagate=False)
 
 # 既存のハンドラをクリアして新規追加
 clean_logger = initializer.apply("clean", clear_handlers=True, add_handler=True)
+```
+
+#### 診断出力を抑止する
+
+`Initializer()` と `apply()` は、初期化の過程 (ハンドラのクリアやロガーの状態) を診断用に標準エラー出力へ出力します。Cloud Run では標準エラー出力も Cloud Logging に取り込まれ、severity を持たない構造化されていないエントリとして混じります。不要な場合は `verbose=False` を指定してください。
+
+```python
+from gnlog import Initializer
+
+initializer = Initializer(verbose=False)
+logger = initializer.apply(__name__)
 ```
 
 ### google-cloud-logging の Client.setup_loggingとの併用は不要
