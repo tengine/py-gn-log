@@ -194,6 +194,56 @@ with context.bind(trace_id="4bf92f35"):
 
 `concurrent.futures.ThreadPoolExecutor` を使う場合も同様に `executor.submit(ctx.run, work)` のように渡します。
 
+### ERROR 以上のログに分類と dedup 用の fingerprint を付ける
+
+Cloud Error Reporting は severity=ERROR かつ `stack_trace` のあるログを自動でグループ化しますが、例外を伴わない ERROR や、メッセージに可変部 (ID、件数、引用文字列) が多いエラーはグループ化に頼れません。`Initializer(error_event=...)` を指定すると、JSON 形式で severity ERROR 以上のログに次のフィールドを付けます。既定では付けません。
+
+| フィールド | 内容 |
+|---|---|
+| `event` | `error_event` に指定した固定値 (例: `app_error`)。ERROR 級のイベントを 1 つの名前で引くため |
+| `error_type` | `extra` で渡した分類。未指定なら `unknown` |
+| `operation` | `extra` で渡した操作名。未指定ならロガー名 |
+| `fingerprint` | 同種のエラーで同じ値になる 16 文字のハッシュ。dedup のキーに使う |
+
+`extra` で `event` や `fingerprint` を明示的に渡した場合は上書きしません。
+
+```python
+import logging
+from gnlog import Initializer
+
+Initializer(error_event="app_error", surface="worker")
+logger = logging.getLogger(__name__)
+
+logger.error("order %s not found", 123, extra={"error_type": "validation", "operation": "orders.get"})
+# {"message": "order 123 not found", "severity": "ERROR", "event": "app_error",
+#  "error_type": "validation", "operation": "orders.get", "fingerprint": "…", ...}
+```
+
+#### fingerprint の規則 (他言語の実装との契約)
+
+`fingerprint` は `gnlog.fingerprint` モジュールの公開関数 `normalize_message()` と `build_fingerprint()` で計算します。TypeScript 等で対になる実装を作るときは、同じ規則にすると言語をまたいで同じ値になります。
+
+1. メッセージ (`%` 書式を展開した後の文字列) に対して、次の順に置き換える
+   1. UUID (`[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`) を `<uuid>` に
+   2. 引用文字列を `<str>` に。二重引用符で囲まれた改行を含まない文字列 (`"[^"\n]*"`)、または単一引用符で囲まれた改行を含まない文字列のうち開き引用符の直前が ASCII の英数字・下線でないもの (`(?<![0-9A-Za-z_])'[^'\n]*'`。`can't` のようなアポストロフィは引用符とみなさない。閉じ引用符の直後は問わない)。単一引用符は引用の区切りとアポストロフィを同じ文字で兼ねるため、アポストロフィで始まる語 (`'cause`、`'90s`) や対になっていない単一引用符があると、そこから次の単一引用符までが `<str>` になります。厳密さが必要なメッセージでは二重引用符を使ってください
+   3. 数値を `<num>` に。ASCII の数字の並びで、3 桁ごとのカンマ区切り・小数部・指数部を含めて 1 つの数値とし、前後は ASCII の単語境界で区切る (`\b\d+(?:,\d{3})*(?:\.\d+)?(?:[eE][+-]?\d+)?\b`。`\b` と `\d` は ASCII の意味)
+2. 先頭 300 文字に切り詰める
+3. `surface`、`operation`、`error_type`、正規化したメッセージのそれぞれについて `\` を `\\` に、`|` を `\|` に escape してから、`|` で連結する (`surface` 未指定なら空文字)
+4. UTF-8 でエンコードした SHA-1 の 16 進表現の先頭 16 文字を取る
+
+```python
+from gnlog.fingerprint import normalize_message, build_fingerprint
+
+normalize_message('order 123 for "alice" not found')
+# => 'order <num> for <str> not found'
+
+build_fingerprint("worker", "orders.create", "validation", "order 123 missing")
+# => sha1("worker|orders.create|validation|order <num> missing")[:16]
+
+build_fingerprint("worker|orders", "create", "validation", "boom")
+# => sha1("worker\|orders|create|validation|boom")[:16]   (値の | は escape される)
+```
+
 ### ログレベルのユーティリティ関数
 
 ```python
