@@ -130,7 +130,8 @@ class ContextFilter(logging.Filter):
     一時的に外したいときなど)。
 
     ロガーに付けた Filter は伝播してきた record には適用されないため、この Filter は
-    handler に付けてください (``Initializer`` は自身の handler に付けます)。
+    handler に付けてください (``gnlog.output.install()`` — provider の入口である
+    ``setup_logging()`` が使う — は組み込む handler に付けます)。
     """
 
     def filter(self, record: logging.LogRecord) -> bool:

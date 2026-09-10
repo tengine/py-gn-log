@@ -19,7 +19,7 @@ from typing import Any
 
 from pythonjsonlogger.json import JsonFormatter as OriginalJsonFormatter
 
-from . import fingerprint
+from .. import fingerprint
 
 # Cloud Logging の labels フィールドのキー
 # https://cloud.google.com/logging/docs/agent/logging/configuration#special-fields
