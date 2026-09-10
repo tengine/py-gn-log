@@ -437,6 +437,40 @@ client.setup_logging()
 詳しくは py-gn-log の前身を作成した際の以下のPRを参照してください。
 https://github.com/tengine/cloud-run-services-fastapi-example/pull/7
 
+## 変更履歴
+
+### 0.3.0
+
+Issue #10〜#18、#29、#30 への対応です。**互換性のない変更を含みます** (下の移行手順を参照)。
+
+- provider 固有の実装を `gnlog.google` サブパッケージへ再配置し、共通部が provider を import しない構造にした (#30)。入口は `gnlog.google.cloud_run.setup_logging()`。`Initializer` と `gnlog.init`、`gnlog.json_formatter` は削除
+- `is_cloud_run` だけの利用で python-json-logger を読み込まなくなった (#29)
+- Cloud Trace 連携 `gnlog.google.cloud_trace` と、W3C `traceparent` の共通部 `gnlog.trace` を追加 (#17)
+- ERROR 以上のログに分類と dedup 用の fingerprint を付ける `gnlog.fingerprint` と `setup_logging(error_event=...)` を追加 (#18)
+- リクエスト / タスク単位の文脈を全ログ行に付ける `gnlog.context` を追加 (#15)
+- ルートロガーの level も設定するようにした (#12。`set_root_level=False` で従来どおり)
+- 環境変数 `GNLOG_FORMAT` と引数 `json` で Cloud Run 外でも JSON 形式を選べるようにした (#13)
+- `json_ensure_ascii` で非 ASCII 文字の escape を制御できるようにした (#14)
+- `verbose=False` で診断出力を抑止できるようにした (#11)
+- `py.typed` を同梱し、利用側で型情報が効くようにした (#10)
+- python-json-logger の依存に上限 (`<5`) を付け、`uv.lock` を追跡対象にした (#16)
+
+#### 0.2.0 からの移行
+
+| 0.2.0 | 0.3.0 |
+|---|---|
+| `from gnlog import Initializer` / `Initializer(...)` | `from gnlog.google.cloud_run import setup_logging` / `setup_logging(...)` (引数は同じ) |
+| `initializer.apply(__name__)` | `setup = setup_logging(...)` の戻り値で `setup.apply(__name__)` |
+| `from gnlog.init import is_cloud_run` | `from gnlog.google.cloud_run import is_cloud_run` |
+| `from gnlog.json_formatter import JsonFormatter` | `from gnlog.google.cloud_logging import JsonFormatter` |
+| `gnlog.init.LOCAL_LOG_FORMAT` | `gnlog.output.TEXT_LOG_FORMAT` |
+| `gnlog.print_loggers` | `gnlog.output.print_loggers` |
+
+挙動の変更で注意が要るもの:
+
+- `setup_logging()` はルートロガーの level も設定します (0.2.0 の `Initializer()` は設定しなかった)。`apply()` していないモジュールのロガーからも INFO / DEBUG が出るようになります。従来どおりにするには `set_root_level=False` を指定してください。
+- 診断出力 (`Initializer starting` 等) は既定で引き続き出ます。抑止するには `verbose=False` を指定してください。
+
 ## 開発者向け
 
 ### 前提条件
