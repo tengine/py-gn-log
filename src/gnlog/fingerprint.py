@@ -21,16 +21,24 @@ Cloud Error Reporting は severity=ERROR かつ stack_trace のあるログを�
        二重引用符を使うこと
     3. 数値を ``<num>`` に置き換える。ASCII の数字の並びで、3 桁ごとのカンマ区切り・小数部・
        指数部 (e10, E-3 など) を含めて 1 つの数値とし、前後は ASCII の単語境界で区切る
-    4. 先頭 300 文字に切り詰める
+    4. 先頭 300 文字に切り詰める。ここでの「文字」は Unicode のコードポイントで、
+       Python の ``len()`` およびスライスと同じ単位。絵文字などの BMP 外の文字は
+       1 文字と数え、サロゲートペアを分断しない (JavaScript の ``String.prototype.slice()``
+       は UTF-16 コード単位なので、対になる実装では ``Array.from(s).slice(0, 300).join("")``
+       のようにコードポイント単位で切ること)
     5. ``surface``、``operation``、``error_type``、正規化したメッセージのそれぞれについて
        ``\\`` を ``\\\\`` に、``|`` を ``\\|`` に escape してから ``|`` で連結し、
        UTF-8 の SHA-1 の 16 進表現の先頭 16 文字を fingerprint とする
+
+    切り詰め (4) と escape (5) の適用順もこの順序が契約です。切り詰めの後に escape する
+    ため、切り詰めで残った ``|`` や ``\\`` が escape の対象になります (escape で増えた
+    文字が切り詰めの長さに影響することはありません)。
 """
 
 import hashlib
 import re
 
-# 正規化後のメッセージの最大長 (文字数)
+# 正規化後のメッセージの最大長 (Unicode のコードポイント数)
 MAX_MESSAGE_LENGTH = 300
 
 # fingerprint の長さ (SHA-1 の 16 進表現の先頭から取る文字数)
@@ -68,11 +76,12 @@ def normalize_message(message: str, max_length: int = MAX_MESSAGE_LENGTH) -> str
 
     Args:
         message: ログメッセージ
-        max_length: 切り詰める長さ (文字数)
+        max_length: 切り詰める長さ (Unicode のコードポイント数)
 
     Returns:
         UUID を ``<uuid>``、引用文字列を ``<str>``、数値を ``<num>`` に置き換え、
-        先頭 ``max_length`` 文字に切り詰めた文字列
+        先頭 ``max_length`` コードポイントに切り詰めた文字列。BMP 外の文字 (絵文字など)
+        も 1 つと数えるため、サロゲートペアを分断しない
 
     Examples:
         >>> normalize_message('order 123 for "alice" not found')

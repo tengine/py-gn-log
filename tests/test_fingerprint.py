@@ -63,6 +63,23 @@ class TestNormalizeMessage:
         """max_length を指定できること"""
         assert normalize_message("abcdef", max_length=3) == "abc"
 
+    def test_counts_astral_characters_as_one_codepoint(self):
+        """切り詰めの単位が Unicode のコードポイントであること
+
+        契約で単位をコードポイントと決めている (README の「fingerprint の規則」)。
+        UTF-16 コード単位で数える実装 (JavaScript の既定) では、BMP 外の文字を
+        2 と数えるためここで切り詰めが起きて値が食い違う。
+        """
+        # コードポイントでは 250、UTF-16 コード単位では 400
+        message = "x" * 100 + "\U0001f600" * 150
+        assert normalize_message(message) == message
+
+    def test_does_not_split_surrogate_pair(self):
+        """切り詰めの境界で BMP 外の文字を分断しないこと"""
+        normalized = normalize_message("x" * 299 + "\U0001f600" * 5)
+        assert normalized == "x" * 299 + "\U0001f600"
+        assert len(normalized) == 300
+
 
 class TestBuildFingerprint:
     """build_fingerprint のテスト"""
