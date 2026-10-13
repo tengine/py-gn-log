@@ -104,9 +104,9 @@ class JsonFormatter(OriginalJsonFormatter):
         # 親クラスの add_fields を呼び出して基本フィールドを追加
         super().add_fields(log_data, record, message_dict)
 
-        # 時刻を RFC 3339 形式 (UTC、マイクロ秒まで) の文字列で time に入れる。
-        # Cloud Logging がログエントリーの時刻 (LogEntry.timestamp) として読む文字列は
-        # time だけで、文字列の timestamp は読まれる形に含まれない。
+        # 時刻を RFC 3339 形式 (UTC、マイクロ秒まで) の文字列でフィールド time に入れる。
+        # Cloud Logging がログエントリーの時刻 (LogEntry.timestamp) として読む文字列の
+        # フィールドは time だけで、文字列のフィールド timestamp は読まれる形に含まれない。
         # https://cloud.google.com/logging/docs/agent/logging/configuration#special-fields
         # extra などで渡された time は、この値で上書きする
         log_data["time"] = datetime.fromtimestamp(record.created, tz=UTC).strftime(

@@ -16,7 +16,7 @@ class TestJsonFormatter:
         assert fields == ["name", "message", "stack_info"]
 
     def test_format_adds_time_in_rfc3339_utc(self):
-        """format() が時刻を RFC 3339 形式 (UTC、マイクロ秒まで) で time に入れること"""
+        """format() が時刻を RFC 3339 形式 (UTC、マイクロ秒まで) でフィールド time に入れること"""
         formatter = JsonFormatter()
         record = logging.LogRecord(
             name="test_logger",
@@ -33,11 +33,11 @@ class TestJsonFormatter:
         log_dict = json.loads(formatted)
 
         assert log_dict["time"] == "2026-10-10T00:00:00.123456Z"
-        # Cloud Logging がログエントリーの時刻として読まない文字列の timestamp は出さない
+        # Cloud Logging がログエントリーの時刻として読まない文字列のフィールド timestamp は出さない
         assert "timestamp" not in log_dict
 
     def test_format_overwrites_time_passed_by_extra(self):
-        """extra で渡した time を、LogRecord の作成時刻で上書きすること"""
+        """extra で渡したフィールド time を、LogRecord の作成時刻で上書きすること"""
         formatter = JsonFormatter()
         record = logging.LogRecord(
             name="test_logger",
