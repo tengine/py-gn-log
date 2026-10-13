@@ -98,7 +98,7 @@ def setup_logging(
         surface: fingerprint の入力に使うサービスやコンポーネントの名前 (error_event 指定時のみ)
         rename_fields: JSON 形式で出力するフィールドの、変換前の名前から変換後の名前への辞書 (例: ``{"name": "logger"}``)。
             名前を変えられるフィールドと、受け付けないキーは
-            gnlog.google.cloud_logging.JsonFormatter を参照
+            クラス gnlog.google.cloud_logging.JsonFormatter を参照
 
     Returns:
         組み込んだ handler と apply() を持つ LoggingSetup
@@ -123,8 +123,8 @@ def setup_logging(
         )
     else:
         if rename_fields is not None:
-            # テキスト形式では使わないが、ローカルで気づけるように検査する。
-            # 検査しないと、JSON 形式になる Cloud Run 上で初めて ValueError になる
+            # 引数 rename_fields はテキスト形式では使わないが、ローカルで気づけるように検査する。
+            # 検査しないと、JSON 形式になる Cloud Run 上で初めて例外 ValueError になる
             from . import cloud_logging
 
             cloud_logging.validate_rename_fields(rename_fields)

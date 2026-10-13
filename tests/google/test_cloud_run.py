@@ -146,7 +146,7 @@ class TestSetupLogging:
         )
 
     def test_setup_passes_rename_fields_to_formatter(self, monkeypatch):
-        """rename_fields が JsonFormatter に渡されること"""
+        """引数 rename_fields が、クラス JsonFormatter に渡されること"""
         monkeypatch.setenv("K_SERVICE", "test-service")
 
         setup = setup_logging(
@@ -170,7 +170,7 @@ class TestSetupLogging:
         assert "name" not in log_dict
 
     def test_setup_rejects_reserved_rename_fields_in_text_format(self):
-        """テキスト形式でも、JsonFormatter が読み書きするキーを含む rename_fields を拒むこと"""
+        """テキスト形式でも、クラス JsonFormatter が読み書きするキーを含む引数 rename_fields を拒むこと"""
         with pytest.raises(ValueError, match="rename_fields"):
             setup_logging(verbose=False, json=False, rename_fields={"name": "severity"})
 

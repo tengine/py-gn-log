@@ -381,7 +381,7 @@ class TestJsonFormatter:
         assert json.loads(formatted)["message"] == "マスタが未登録です"
 
     def test_format_renames_fields_with_rename_fields(self):
-        """rename_fields で、ロガー名と extra で渡したフィールドの名前が変わること"""
+        """引数 rename_fields で、ロガー名と、引数 extra で渡したフィールドの名前が変わること"""
         formatter = JsonFormatter(rename_fields={"name": "logger", "user_id": "uid"})
         record = logging.LogRecord(
             name="audit_log",
@@ -418,14 +418,14 @@ class TestJsonFormatter:
         ],
     )
     def test_rename_fields_rejects_keys_the_formatter_reads_or_writes(self, key):
-        """このクラスが読み書きするキーは、rename_fields の変換前にも変換後にも使えないこと"""
+        """このクラスが読み書きするキーは、引数 rename_fields の変換前にも変換後にも使えないこと"""
         with pytest.raises(ValueError, match="rename_fields"):
             JsonFormatter(rename_fields={key: "renamed"})
         with pytest.raises(ValueError, match="rename_fields"):
             JsonFormatter(rename_fields={"name": key})
 
     def test_error_fields_fingerprint_uses_renamed_message(self):
-        """message の名前を変えても、出力したメッセージから fingerprint を計算すること"""
+        """フィールド message の名前を変えても、出力したメッセージからフィールド fingerprint の値を計算すること"""
         formatter = JsonFormatter(
             error_event="app_error", rename_fields={"message": "msg"}
         )
