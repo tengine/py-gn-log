@@ -424,6 +424,40 @@ class TestJsonFormatter:
         with pytest.raises(ValueError, match="rename_fields"):
             JsonFormatter(rename_fields={"name": key})
 
+    @pytest.mark.parametrize(
+        "rename_fields",
+        [
+            # 複数のキーを同じ名前に変える
+            {"a": "x", "b": "x"},
+            # 名前を変えていない name・message・stack_info と同じ名前に変える
+            {"name": "message"},
+            {"user_id": "name"},
+            {"detail": "message"},
+            {"user_id": "stack_info"},
+        ],
+    )
+    def test_rename_fields_rejects_names_that_overlap(self, rename_fields):
+        """変換後の名前が重なり、片方の値が出力から失われる引数 rename_fields を拒むこと"""
+        with pytest.raises(ValueError, match="rename_fields"):
+            JsonFormatter(rename_fields=rename_fields)
+
+    def test_rename_fields_allows_swapping_names(self):
+        """名前を変えるフィールドどうしなら、変換後の名前が元の名前と同じでも受け付けること"""
+        formatter = JsonFormatter(rename_fields={"name": "message", "message": "msg"})
+        record = logging.LogRecord(
+            name="audit_log",
+            level=logging.INFO,
+            pathname="test.py",
+            lineno=10,
+            msg="Test message",
+            args=(),
+            exc_info=None,
+        )
+        log_dict = json.loads(formatter.format(record))
+        assert log_dict["message"] == "audit_log"
+        assert log_dict["msg"] == "Test message"
+        assert "name" not in log_dict
+
     def test_error_fields_fingerprint_uses_renamed_message(self):
         """フィールド message の名前を変えても、出力したメッセージからフィールド fingerprint の値を計算すること"""
         formatter = JsonFormatter(

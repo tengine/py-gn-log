@@ -14,6 +14,7 @@ time と severity フィールドを自動的に追加します。
 
 import logging
 import threading
+from collections import Counter
 from datetime import UTC, datetime
 from typing import Any
 
@@ -59,13 +60,26 @@ _RENAME_RESERVED_KEYS: frozenset[str] = frozenset(
 
 
 def validate_rename_fields(rename_fields: dict[str, str]) -> None:
-    """引数 rename_fields に、クラス JsonFormatter が読み書きするキーが含まれていないかを検査する
+    """引数 rename_fields が、出力するフィールドの値を失わせないかを検査する
+
+    次のどれかに当たると、値がフォーマッターに上書きされるか、フォーマッターの処理が
+    働かなくなるか、名前が重なった片方の値が出力から失われるので受け付けない。
+
+    - 変換前・変換後のどちらかに、クラス JsonFormatter が読み書きするキー (``time``・
+      ``level``・``severity``・``logging.googleapis.com/labels``・``exc_info``・
+      ``stack_trace``・``event``・``error_type``・``operation``・``fingerprint``) がある
+    - 複数の変換前の名前を、同じ変換後の名前に対応させている
+    - 変換後の名前が、名前を変えていないフィールド ``name``・``message``・``stack_info``
+      と同じ (``{"name": "message", "message": "msg"}`` のように、そのフィールドの名前も
+      変えるなら受け付ける)
+
+    引数 extra などで渡すキーとの重なりは、ここでは分からないので検査しない。
 
     Args:
         rename_fields: 変換前のキー名から変換後のキー名への辞書
 
     Raises:
-        ValueError: 変換前・変換後のどちらかに JsonFormatter が読み書きするキーが含まれる場合
+        ValueError: 上のどれかに当たる場合
     """
     reserved = sorted(
         (set(rename_fields) | set(rename_fields.values())) & _RENAME_RESERVED_KEYS
@@ -74,6 +88,24 @@ def validate_rename_fields(rename_fields: dict[str, str]) -> None:
         raise ValueError(
             f"rename_fields conflicts with keys JsonFormatter reads or writes: {reserved}. "
             "Choose different key names."
+        )
+    duplicated = sorted(
+        name for name, count in Counter(rename_fields.values()).items() if count > 1
+    )
+    if duplicated:
+        raise ValueError(
+            f"rename_fields maps multiple keys to the same name: {duplicated}. "
+            "Choose different key names."
+        )
+    overwritten = sorted(
+        name
+        for name in set(rename_fields.values())
+        if name in _RECORD_FIELDS and name not in rename_fields
+    )
+    if overwritten:
+        raise ValueError(
+            f"rename_fields renames keys to names of fields that are not renamed: {overwritten}. "
+            "Rename those fields as well, or choose different key names."
         )
 
 
@@ -121,10 +153,8 @@ class JsonFormatter(OriginalJsonFormatter):
                 名前は変わらない。None (既定) なら名前を変えない
 
         Raises:
-            ValueError: rename_fields の変換前・変換後のどちらかに、このクラスが読み書きする
-                キー (``time``・``level``・``severity``・``logging.googleapis.com/labels``・
-                ``exc_info``・``stack_trace``・``event``・``error_type``・``operation``・
-                ``fingerprint``) が含まれる場合
+            ValueError: rename_fields が、出力するフィールドの値を失わせる場合。
+                条件は関数 validate_rename_fields を参照
         """
         if rename_fields is not None:
             validate_rename_fields(rename_fields)

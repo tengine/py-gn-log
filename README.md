@@ -416,7 +416,11 @@ setup_logging(rename_fields={"name": "logger"})
 
 名前が変わるのは、python-json-logger が出力するフィールド (`name`・`message`・`stack_info` と、引数 `extra` やモジュール `gnlog.context` で渡したフィールド) です。`JsonFormatter` が後から入れるフィールド (`time`・`severity` など) の名前は変わりません。`message` の名前を変えた場合、`fingerprint` は名前を変えた後のフィールドの値から計算します。
 
-次のキーは `JsonFormatter` が読み書きするので、`rename_fields` の変換前にも変換後にも使えません。指定すると例外 `ValueError` になります。テキスト形式で出力する場合も、`setup_logging()` は同じ検査をします。
+次の場合は、出力するフィールドの値が失われるか、`JsonFormatter` の処理が働かなくなるので、例外 `ValueError` になります。テキスト形式で出力する場合も、`setup_logging()` は同じ検査をします。
+
+- 下の表のキーを、`rename_fields` の変換前か変換後に使う。これらのキーは `JsonFormatter` が読み書きする
+- 複数のキーを同じ名前に変える (例: `{"a": "x", "b": "x"}`)
+- 名前を変えていない `name`・`message`・`stack_info` と同じ名前に変える (例: `{"name": "message"}`)。`{"name": "message", "message": "msg"}` のように、そのフィールドの名前も変えるなら使えます
 
 | キー | 使えない理由 |
 |---|---|
@@ -424,6 +428,8 @@ setup_logging(rename_fields={"name": "logger"})
 | `level` | `JsonFormatter` が `severity` を決めるときに読む |
 | `exc_info`・`stack_trace` | severity ERROR 以上のログで、`JsonFormatter` が `exc_info` (python-json-logger がトレースバックを入れるフィールド) を `stack_trace` に載せ替える |
 | `event`・`error_type`・`operation`・`fingerprint` | 引数 `error_event` を指定したときに `JsonFormatter` が読み書きする。`error_event` を指定しない場合も使えない |
+
+引数 `extra` やモジュール `gnlog.context` で渡すキーとの重なりは、`rename_fields` を受け取る時点では分からないので検査しません。変換後の名前と同じキーを渡すと、渡したキーの値が出力に残り、名前を変えたフィールドの値は失われます。たとえば `{"name": "logger"}` を指定して `extra={"logger": ...}` を渡すと、ロガー名は出力されません。
 
 #### 診断出力を抑止する
 
