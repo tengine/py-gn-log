@@ -145,6 +145,35 @@ class TestSetupLogging:
             "worker", "app", "unknown", "failed"
         )
 
+    def test_setup_passes_rename_fields_to_formatter(self, monkeypatch):
+        """rename_fields が JsonFormatter に渡されること"""
+        monkeypatch.setenv("K_SERVICE", "test-service")
+
+        setup = setup_logging(
+            log_level=logging.INFO, verbose=False, rename_fields={"name": "logger"}
+        )
+
+        record = logging.LogRecord(
+            name="audit_log",
+            level=logging.INFO,
+            pathname="test.py",
+            lineno=1,
+            msg="done",
+            args=(),
+            exc_info=None,
+        )
+        assert setup.handler.formatter is not None
+        import json
+
+        log_dict = json.loads(setup.handler.formatter.format(record))
+        assert log_dict["logger"] == "audit_log"
+        assert "name" not in log_dict
+
+    def test_setup_rejects_reserved_rename_fields_in_text_format(self):
+        """テキスト形式でも、JsonFormatter が読み書きするキーを含む rename_fields を拒むこと"""
+        with pytest.raises(ValueError, match="rename_fields"):
+            setup_logging(verbose=False, json=False, rename_fields={"name": "severity"})
+
     def test_setup_respects_log_level_parameter(self):
         """log_level パラメータが反映されること"""
         setup = setup_logging(log_level=logging.DEBUG)

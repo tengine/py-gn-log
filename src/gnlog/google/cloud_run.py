@@ -66,6 +66,7 @@ def setup_logging(
     json: bool | None = None,
     error_event: str | None = None,
     surface: str | None = None,
+    rename_fields: dict[str, str] | None = None,
 ) -> output.LoggingSetup:
     """Cloud Run 向けにルートロガーを設定する
 
@@ -95,9 +96,16 @@ def setup_logging(
             フィールド (event / error_type / operation / fingerprint) を付ける。
             詳しくは gnlog.google.cloud_logging.JsonFormatter を参照
         surface: fingerprint の入力に使うサービスやコンポーネントの名前 (error_event 指定時のみ)
+        rename_fields: JSON 形式で出力するフィールドの、変換前の名前から変換後の名前への辞書 (例: ``{"name": "logger"}``)。
+            名前を変えられるフィールドと、受け付けないキーは
+            gnlog.google.cloud_logging.JsonFormatter を参照
 
     Returns:
         組み込んだ handler と apply() を持つ LoggingSetup
+
+    Raises:
+        ValueError: rename_fields に JsonFormatter が読み書きするキーが含まれる場合。
+            テキスト形式で出力する場合も検査する
     """
     if use_json_output(json):
         # is_cloud_run() だけを使う利用側が python-json-logger を読み込まずに済むよう、
@@ -110,9 +118,16 @@ def setup_logging(
                 json_ensure_ascii=json_ensure_ascii,
                 error_event=error_event,
                 surface=surface,
+                rename_fields=rename_fields,
             )
         )
     else:
+        if rename_fields is not None:
+            # テキスト形式では使わないが、ローカルで気づけるように検査する。
+            # 検査しないと、JSON 形式になる Cloud Run 上で初めて ValueError になる
+            from . import cloud_logging
+
+            cloud_logging.validate_rename_fields(rename_fields)
         handler = output.text_handler(output_path, log_format)
     return output.install(
         handler, log_level=log_level, set_root_level=set_root_level, verbose=verbose

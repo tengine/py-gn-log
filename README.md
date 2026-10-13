@@ -403,6 +403,28 @@ from gnlog.google.cloud_run import setup_logging
 setup_logging(json_ensure_ascii=False)
 ```
 
+#### 出力するフィールドの名前を変える
+
+JSON 形式で出力するフィールドの名前は、引数 `rename_fields` で変えられます。python-json-logger の同名の引数にそのまま渡します。既定では名前を変えません。クラス `gnlog.google.cloud_logging.JsonFormatter` を直接使う場合も、同じ引数を渡せます。
+
+```python
+from gnlog.google.cloud_run import setup_logging
+
+# ロガー名をキー name ではなく logger で出力する
+setup_logging(rename_fields={"name": "logger"})
+```
+
+名前が変わるのは、python-json-logger が出力するフィールド (`name`・`message`・`stack_info` と、引数 `extra` やモジュール `gnlog.context` で渡したフィールド) です。`JsonFormatter` が後から入れるフィールド (`time`・`severity` など) の名前は変わりません。`message` の名前を変えた場合、`fingerprint` は名前を変えた後のフィールドの値から計算します。
+
+次のキーは `JsonFormatter` が読み書きするので、`rename_fields` の変換前にも変換後にも使えません。指定すると例外 `ValueError` になります。テキスト形式で出力する場合も、`setup_logging()` は同じ検査をします。
+
+| キー | 使えない理由 |
+|---|---|
+| `time`・`severity`・`logging.googleapis.com/labels` | `JsonFormatter` が後から値を入れる (`logging.googleapis.com/labels` には値を足す) |
+| `level` | `JsonFormatter` が `severity` を決めるときに読む |
+| `exc_info`・`stack_trace` | severity ERROR 以上のログで、`JsonFormatter` が `exc_info` (python-json-logger がトレースバックを入れるフィールド) を `stack_trace` に載せ替える |
+| `event`・`error_type`・`operation`・`fingerprint` | 引数 `error_event` を指定したときに `JsonFormatter` が読み書きする。`error_event` を指定しない場合も使えない |
+
 #### 診断出力を抑止する
 
 `setup_logging()` と `apply()` は、初期化の過程 (ハンドラのクリアやロガーの状態) を診断用に標準エラー出力へ出力します。Cloud Run では標準エラー出力も Cloud Logging に取り込まれ、severity を持たない構造化されていないエントリとして混じります。不要な場合は `verbose=False` を指定してください。
@@ -451,6 +473,7 @@ https://github.com/tengine/cloud-run-services-fastapi-example/pull/7
 
 - 時刻をフィールド `time` で出力するようにした (#40)。クラス `gnlog.google.cloud_logging.JsonFormatter` は、これまで出力していた文字列のフィールド `timestamp` を出力しない。`time` の扱いは「Cloud Run での使用」を参照
 - `extra` などで渡したフィールド `timestamp` を上書きしなくなった。扱いは「Cloud Run での使用」を参照
+- JSON 形式で出力するフィールドの名前を、引数 `rename_fields` で変えられるようにした (#41)。扱いは「出力するフィールドの名前を変える」を参照
 
 #### 0.3.0 からの移行
 
