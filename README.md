@@ -429,7 +429,7 @@ setup_logging(rename_fields={"name": "logger"})
 | `exc_info`・`stack_trace` | severity ERROR 以上のログで、`JsonFormatter` が `exc_info` (python-json-logger がトレースバックを入れるフィールド) を `stack_trace` に載せ替える |
 | `event`・`error_type`・`operation`・`fingerprint` | 引数 `error_event` を指定したときに `JsonFormatter` が読み書きする (「ERROR 以上のログに分類と dedup 用の fingerprint を付ける」を参照)。`error_event` を指定しない場合も使えない |
 
-ログを書くときに渡すフィールドとの重なりは、`rename_fields` を受け取る時点では分からないので検査しません。名前を変えた結果、同じ名前のフィールドが複数になると、python-json-logger が後から書いた値が残り、ほかの値は失われます。python-json-logger は `name`・`message`・`stack_info` を最初に書くので、これらの名前を変えて、変換後の名前と同じフィールドを渡すと、渡した値が残ります。たとえば `{"name": "logger"}` を指定して `extra={"logger": ...}` を渡すと、ロガー名は出力されません。ログを書くときに渡すフィールドどうしでは、どの値が残るかは渡し方と順序で決まります。
+ログを書くときに渡すフィールドとの重なりは、`rename_fields` を受け取る時点では分からないので検査しません。変換後の名前と同じ名前のフィールドを渡すと、どの値が残るかは python-json-logger が値を書く順序で決まり、ほかの値は失われます。たとえば `{"name": "logger"}` を指定して `extra={"logger": ...}` を渡すと、ロガー名は出力されません。変換後の名前と同じ名前のフィールドは渡さないでください。
 
 #### 診断出力を抑止する
 
