@@ -109,6 +109,8 @@ class JsonFormatter(OriginalJsonFormatter):
         # として読む文字列のフィールドは time だけで、文字列のフィールド timestamp は
         # 読まれる形に含まれない。
         # https://cloud.google.com/logging/docs/agent/logging/configuration#special-fields
+        # (Logging エージェントの設定の文書。Cloud Run の文書 https://docs.cloud.google.com/run/docs/logging
+        # も、構造化ログの特別なフィールドの説明としてこの文書を参照している)
         # extra などで渡された time は、この値で上書きする
         log_data["time"] = datetime.fromtimestamp(record.created, tz=UTC).strftime(
             "%Y-%m-%dT%H:%M:%S.%fZ"

@@ -173,7 +173,7 @@ Cloud Run 上かどうかの判定は `gnlog.google.cloud_run.is_cloud_run()` �
 
 `time` は Cloud Logging がログエントリーの時刻として読むフィールドです。RFC 3339 形式 (UTC、マイクロ秒まで) で出力します。引数 `extra` などで渡したフィールド `time` は、この値で上書きされます。
 
-ログエントリーの時刻を呼び出し側で指定したいときは、キー `seconds` と `nanos` を持つオブジェクトのフィールド `timestamp` か、フィールド `timestampSeconds` と `timestampNanos` の組を `extra` などで渡します。クラス `gnlog.google.cloud_logging.JsonFormatter` (`setup_logging()` が JSON 形式で使う formatter) はこれらを上書きせずに出力し、[Cloud Logging の文書](https://cloud.google.com/logging/docs/agent/logging/configuration#special-fields)では、これらは `time` より先に読まれます。
+ログエントリーの時刻を呼び出し側で指定したいときは、キー `seconds` と `nanos` を持つオブジェクトのフィールド `timestamp` か、フィールド `timestampSeconds` と `timestampNanos` の組を `extra` などで渡します。クラス `gnlog.google.cloud_logging.JsonFormatter` (`setup_logging()` が JSON 形式で使う formatter) はこれらを上書きせずに出力し、[Cloud Logging の文書](https://cloud.google.com/logging/docs/agent/logging/configuration#special-fields)では、これらは `time` より先に読まれます。この文書は Logging エージェントの設定の文書ですが、[Cloud Run の文書](https://docs.cloud.google.com/run/docs/logging)も、構造化ログの特別なフィールドの説明としてこの文書を参照しています。
 
 ### リクエスト / タスク単位の文脈を全ログ行に付ける
 
