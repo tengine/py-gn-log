@@ -414,7 +414,7 @@ from gnlog.google.cloud_run import setup_logging
 setup_logging(rename_fields={"name": "logger"})
 ```
 
-名前が変わるのは、python-json-logger が出力するフィールド (`name`・`message`・`stack_info` と、引数 `extra` やモジュール `gnlog.context` で渡したフィールド) です。`JsonFormatter` が後から入れるフィールド (`time`・`severity` など) の名前は変わりません。`message` の名前を変えた場合、`fingerprint` は名前を変えた後のフィールドの値から計算します。
+名前が変わるのは、python-json-logger が出力するフィールドです。`name`・`message`・`stack_info` と、ログを書くときに渡すフィールド (引数 `extra` やモジュール `gnlog.context` で渡したフィールドと、ログのメッセージに渡した辞書のキー) の名前が変わります。`JsonFormatter` が後から入れるフィールド (`time`・`severity` など) の名前は変わりません。`message` の名前を変えた場合、`fingerprint` は名前を変えた後のフィールドの値から計算します。
 
 次の場合は、出力するフィールドの値が失われるか、`JsonFormatter` の処理が働かなくなるので、例外 `ValueError` になります。テキスト形式で出力する場合も、`setup_logging()` は同じ検査をします。
 
@@ -429,7 +429,7 @@ setup_logging(rename_fields={"name": "logger"})
 | `exc_info`・`stack_trace` | severity ERROR 以上のログで、`JsonFormatter` が `exc_info` (python-json-logger がトレースバックを入れるフィールド) を `stack_trace` に載せ替える |
 | `event`・`error_type`・`operation`・`fingerprint` | 引数 `error_event` を指定したときに `JsonFormatter` が読み書きする (「ERROR 以上のログに分類と dedup 用の fingerprint を付ける」を参照)。`error_event` を指定しない場合も使えない |
 
-引数 `extra` やモジュール `gnlog.context` で渡すキーとの重なりは、`rename_fields` を受け取る時点では分からないので検査しません。変換後の名前と同じキーを渡すと、渡したキーの値が出力に残り、名前を変えたフィールドの値は失われます。たとえば `{"name": "logger"}` を指定して `extra={"logger": ...}` を渡すと、ロガー名は出力されません。
+ログを書くときに渡すフィールドとの重なりは、`rename_fields` を受け取る時点では分からないので検査しません。名前を変えた結果、同じ名前のフィールドが複数になると、python-json-logger が後から書いた値が残り、ほかの値は失われます。python-json-logger は `name`・`message`・`stack_info` を最初に書くので、これらの名前を変えて、変換後の名前と同じフィールドを渡すと、渡した値が残ります。たとえば `{"name": "logger"}` を指定して `extra={"logger": ...}` を渡すと、ロガー名は出力されません。ログを書くときに渡すフィールドどうしでは、どの値が残るかは渡し方と順序で決まります。
 
 #### 診断出力を抑止する
 

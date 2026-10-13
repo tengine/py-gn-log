@@ -73,7 +73,8 @@ def validate_rename_fields(rename_fields: dict[str, str]) -> None:
       と同じ (``{"name": "message", "message": "msg"}`` のように、そのフィールドの名前も
       変えるなら受け付ける)
 
-    引数 extra などで渡すキーとの重なりは、ここでは分からないので検査しない。
+    ログを書くときに渡すキー (引数 extra などで渡すキーと、ログのメッセージに渡す辞書のキー)
+    との重なりは、ここでは分からないので検査しない。
 
     Args:
         rename_fields: 変換前のキー名から変換後のキー名への辞書
@@ -149,8 +150,8 @@ class JsonFormatter(OriginalJsonFormatter):
             rename_fields: 出力するフィールドの、変換前の名前から変換後の名前への辞書 (例: ``{"name": "logger"}``)。
                 python-json-logger の同名の引数にそのまま渡す。名前が変わるのは
                 python-json-logger が出力するフィールド (``name``・``message``・``stack_info``
-                と、引数 extra などで渡したフィールド) で、このクラスが後から入れるフィールドの
-                名前は変わらない。None (既定) なら名前を変えない
+                と、引数 extra などで渡したフィールドと、ログのメッセージに渡した辞書のキー) で、
+                このクラスが後から入れるフィールドの名前は変わらない。None (既定) なら名前を変えない
 
         Raises:
             ValueError: rename_fields が、出力するフィールドの値を失わせる場合。
