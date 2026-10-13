@@ -41,9 +41,9 @@ class JsonFormatter(OriginalJsonFormatter):
     python-json-logger をベースに、Cloud Logging で認識される
     特別なフィールド（time, severity, labels）を追加します。
 
-    フィールド ``time`` には LogRecord の作成時刻を入れ、extra などで渡された
-    ``time`` は上書きします。ログエントリーの時刻を呼び出し側が指定するための
-    特別なフィールド (``seconds`` と ``nanos`` を持つオブジェクトの ``timestamp``、
+    フィールド ``time`` にはクラス ``logging.LogRecord`` の作成時刻を入れ、引数 ``extra``
+    などで渡された ``time`` は上書きします。ログエントリーの時刻を呼び出し側が指定するための
+    特別なフィールド (キー ``seconds`` と ``nanos`` を持つオブジェクトの ``timestamp``、
     ``timestampSeconds`` と ``timestampNanos`` の組) は上書きせずに出力します。
     Cloud Logging の文書では、これらは ``time`` より先に読まれます。
     """
@@ -105,8 +105,9 @@ class JsonFormatter(OriginalJsonFormatter):
         super().add_fields(log_data, record, message_dict)
 
         # 時刻を RFC 3339 形式 (UTC、マイクロ秒まで) の文字列でフィールド time に入れる。
-        # Cloud Logging がログエントリーの時刻 (LogEntry.timestamp) として読む文字列の
-        # フィールドは time だけで、文字列のフィールド timestamp は読まれる形に含まれない。
+        # Cloud Logging がログエントリーの時刻 (ログエントリーのフィールド LogEntry.timestamp)
+        # として読む文字列のフィールドは time だけで、文字列のフィールド timestamp は
+        # 読まれる形に含まれない。
         # https://cloud.google.com/logging/docs/agent/logging/configuration#special-fields
         # extra などで渡された time は、この値で上書きする
         log_data["time"] = datetime.fromtimestamp(record.created, tz=UTC).strftime(

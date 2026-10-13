@@ -37,7 +37,7 @@ class TestJsonFormatter:
         assert "timestamp" not in log_dict
 
     def test_format_overwrites_time_passed_by_extra(self):
-        """extra で渡したフィールド time を、LogRecord の作成時刻で上書きすること"""
+        """引数 extra で渡したフィールド time を、クラス LogRecord の作成時刻で上書きすること"""
         formatter = JsonFormatter()
         record = logging.LogRecord(
             name="test_logger",

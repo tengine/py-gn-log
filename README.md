@@ -171,9 +171,9 @@ Cloud Run 上かどうかの判定は `gnlog.google.cloud_run.is_cloud_run()` �
 }
 ```
 
-`time` は Cloud Logging がログエントリーの時刻として読むフィールドです。RFC 3339 形式 (UTC、マイクロ秒まで) で出力します。`extra` などで渡したフィールド `time` は、この値で上書きされます。
+`time` は Cloud Logging がログエントリーの時刻として読むフィールドです。RFC 3339 形式 (UTC、マイクロ秒まで) で出力します。引数 `extra` などで渡したフィールド `time` は、この値で上書きされます。
 
-ログエントリーの時刻を呼び出し側で指定したいときは、`seconds` と `nanos` を持つオブジェクトのフィールド `timestamp` か、フィールド `timestampSeconds` と `timestampNanos` の組を `extra` などで渡します。クラス `gnlog.google.cloud_logging.JsonFormatter` (`setup_logging()` が JSON 形式で使う formatter) はこれらを上書きせずに出力し、[Cloud Logging の文書](https://cloud.google.com/logging/docs/agent/logging/configuration#special-fields)では、これらは `time` より先に読まれます。
+ログエントリーの時刻を呼び出し側で指定したいときは、キー `seconds` と `nanos` を持つオブジェクトのフィールド `timestamp` か、フィールド `timestampSeconds` と `timestampNanos` の組を `extra` などで渡します。クラス `gnlog.google.cloud_logging.JsonFormatter` (`setup_logging()` が JSON 形式で使う formatter) はこれらを上書きせずに出力し、[Cloud Logging の文書](https://cloud.google.com/logging/docs/agent/logging/configuration#special-fields)では、これらは `time` より先に読まれます。
 
 ### リクエスト / タスク単位の文脈を全ログ行に付ける
 
@@ -454,7 +454,7 @@ https://github.com/tengine/cloud-run-services-fastapi-example/pull/7
 
 #### 0.3.0 からの移行
 
-- `JsonFormatter` が出力していた `jsonPayload.timestamp` を参照しているログのクエリ・ログベースの指標・アラート・BigQuery のクエリは、新しい行で値を取得できなくなります。ログエントリーの時刻 (トップレベルの `timestamp`。BigQuery へのシンクのテーブルでは列 `timestamp`) を使うように直してください。
+- `JsonFormatter` が出力していたフィールド `jsonPayload.timestamp` を参照しているログのクエリ・ログベースの指標・アラート・BigQuery のクエリは、新しい行で値を取得できなくなります。ログエントリーの時刻 (トップレベルの `timestamp`。BigQuery へのシンクのテーブルでは列 `timestamp`) を使うように直してください。
 - `extra` や `gnlog.context` でフィールド `time` を渡している場合は、別のキー名に変えてください。渡した値は `JsonFormatter` に上書きされます (「Cloud Run での使用」を参照)。
 - Cloud Logging の文書のとおりなら、ログエントリーの時刻は、Cloud Logging がログを取り込んだ時刻から、ログを書いた時刻 (`LogRecord` の作成時刻) に変わります。
 
