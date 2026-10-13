@@ -34,6 +34,10 @@ FINGERPRINT_KEY = "fingerprint"
 # error_type が指定されなかったときの値
 ERROR_TYPE_UNKNOWN = "unknown"
 
+# python-json-logger がクラス logging.LogRecord から出力するフィールド
+# (クラス JsonFormatter のメソッド parse が返すもの)
+_RECORD_FIELDS: tuple[str, ...] = ("name", "message", "stack_info")
+
 # クラス JsonFormatter が、親クラスのメソッド add_fields の後で読み書きするキー。
 # 引数 rename_fields の変換前・変換後に使うと、値がフォーマッターに上書きされるか、
 # フォーマッターの処理 (フィールド severity の決定、フィールド stack_trace への載せ替え、
@@ -138,7 +142,7 @@ class JsonFormatter(OriginalJsonFormatter):
             出力するフィールド名のリスト
             name: ロガー名、message: ログメッセージ、stack_info: スタックトレース情報
         """
-        return ["name", "message", "stack_info"]
+        return list(_RECORD_FIELDS)
 
     def add_fields(
         self,
