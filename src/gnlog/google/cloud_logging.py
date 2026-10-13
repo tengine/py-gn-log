@@ -2,7 +2,7 @@
 Google Cloud Logging 用の JSON フォーマッター
 
 Cloud Logging の構造化ログに適した形式でログを出力します。
-timestamp と severity フィールドを自動的に追加します。
+time と severity フィールドを自動的に追加します。
 
 参考:
 - https://nhairs.github.io/python-json-logger/latest/reference/pythonjsonlogger/json/#pythonjsonlogger.json.JsonFormatter.add_fields
@@ -39,7 +39,7 @@ class JsonFormatter(OriginalJsonFormatter):
     """Google Cloud Logging 向けの JSON フォーマッター
 
     python-json-logger をベースに、Cloud Logging で認識される
-    特別なフィールド（timestamp, severity, labels）を追加します。
+    特別なフィールド（time, severity, labels）を追加します。
     """
 
     def __init__(
@@ -88,7 +88,7 @@ class JsonFormatter(OriginalJsonFormatter):
     ) -> None:
         """ログデータに追加のフィールドを設定
 
-        Cloud Logging 用の timestamp, severity, labels フィールドを追加します。
+        Cloud Logging 用の time, severity, labels フィールドを追加します。
 
         Args:
             log_data: ログデータの辞書（出力されるJSON）
@@ -98,9 +98,12 @@ class JsonFormatter(OriginalJsonFormatter):
         # 親クラスの add_fields を呼び出して基本フィールドを追加
         super().add_fields(log_data, record, message_dict)
 
-        # ISO 8601 形式のタイムスタンプを追加（Cloud Logging が認識）
-        # "Z" サフィックスと一致するよう UTC で整形する (Cloud Run は TZ=UTC のため出力は従来と同一)
-        log_data["timestamp"] = datetime.fromtimestamp(record.created, tz=UTC).strftime(
+        # 時刻を RFC 3339 形式 (UTC、マイクロ秒まで) の文字列で time に入れる。
+        # Cloud Logging がログエントリーの時刻 (LogEntry.timestamp) として読む文字列は
+        # time だけで、文字列の timestamp は読まれる形に含まれない。
+        # https://cloud.google.com/logging/docs/agent/logging/configuration#special-fields
+        # extra などで渡された time は、この値で上書きする
+        log_data["time"] = datetime.fromtimestamp(record.created, tz=UTC).strftime(
             "%Y-%m-%dT%H:%M:%S.%fZ"
         )
 

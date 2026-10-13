@@ -165,11 +165,13 @@ Cloud Run 上かどうかの判定は `gnlog.google.cloud_run.is_cloud_run()` �
 {
   "name": "my_service",
   "message": "Service started",
-  "timestamp": "2025-01-15T10:30:45.123456Z",
+  "time": "2025-01-15T10:30:45.123456Z",
   "severity": "INFO",
   "user_id": 123
 }
 ```
+
+`time` は Cloud Logging がログエントリーの時刻として読むフィールドです。RFC 3339 形式 (UTC、マイクロ秒まで) で出力します。
 
 ### リクエスト / タスク単位の文脈を全ログ行に付ける
 
