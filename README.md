@@ -445,6 +445,19 @@ https://github.com/tengine/cloud-run-services-fastapi-example/pull/7
 
 ## 変更履歴
 
+### 次の版 (未リリース)
+
+版の番号はリリースのときに決めます。**互換性のない変更を含みます** (下の移行手順を参照)。
+
+- 時刻を、Cloud Logging がログエントリーの時刻として読むフィールド `time` で出力するようにした (#40)。文字列のフィールド `timestamp` は出力しない
+- `extra` などで渡したフィールド `timestamp` を上書きしなくなった。扱いは「Cloud Run での使用」を参照
+
+#### 0.3.0 からの移行
+
+- `jsonPayload.timestamp` を参照しているログのクエリ・ログベースの指標・アラート・BigQuery のクエリは、新しい行で値を取得できなくなります。ログエントリーの時刻 (トップレベルの `timestamp`。BigQuery へのシンクのテーブルでは列 `timestamp`) を使うように直してください。
+- `extra` や `gnlog.context` でフィールド `time` を渡している場合は、別のキー名に変えてください。formatter が時刻で上書きするので、渡した値は出力に残りません。
+- Cloud Logging の文書のとおりなら、ログエントリーの時刻は、Cloud Logging がログを取り込んだ時刻から、ログを書いた時刻 (`LogRecord` の作成時刻) に変わります。
+
 ### 0.3.0
 
 Issue #10〜#18、#29、#30 への対応です。**互換性のない変更を含みます** (下の移行手順を参照)。
