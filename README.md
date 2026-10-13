@@ -447,7 +447,7 @@ https://github.com/tengine/cloud-run-services-fastapi-example/pull/7
 
 ### 次の版 (未リリース)
 
-版の番号はリリースのときに決めます。**互換性のない変更を含みます** (下の移行手順を参照)。
+版の番号はリリースのときに決めます。**互換性のない変更を含みます**。
 
 - 時刻をフィールド `time` で出力するようにした (#40)。formatter は、これまで出力していた文字列のフィールド `timestamp` を出力しない。`time` の扱いは「Cloud Run での使用」を参照
 - `extra` などで渡したフィールド `timestamp` を上書きしなくなった。扱いは「Cloud Run での使用」を参照
