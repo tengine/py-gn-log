@@ -40,6 +40,12 @@ class JsonFormatter(OriginalJsonFormatter):
 
     python-json-logger をベースに、Cloud Logging で認識される
     特別なフィールド（time, severity, labels）を追加します。
+
+    フィールド ``time`` には LogRecord の作成時刻を入れ、extra などで渡された
+    ``time`` は上書きします。ログエントリーの時刻を呼び出し側が指定するための
+    特別なフィールド (``seconds`` と ``nanos`` を持つオブジェクトの ``timestamp``、
+    ``timestampSeconds`` と ``timestampNanos`` の組) は上書きせずに出力します。
+    Cloud Logging の文書では、これらは ``time`` より先に読まれます。
     """
 
     def __init__(

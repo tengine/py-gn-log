@@ -56,6 +56,29 @@ class TestJsonFormatter:
 
         assert log_dict["time"] == "2026-10-10T00:00:00.123456Z"
 
+    def test_format_keeps_entry_time_fields_passed_by_extra(self):
+        """extra で渡したログエントリーの時刻のフィールドを、上書きせずに出力すること"""
+        formatter = JsonFormatter()
+        record = logging.LogRecord(
+            name="test_logger",
+            level=logging.INFO,
+            pathname="test.py",
+            lineno=10,
+            msg="Test message",
+            args=(),
+            exc_info=None,
+        )
+        record.timestamp = {"seconds": 1791590400, "nanos": 0}
+        record.timestampSeconds = 1791590400
+        record.timestampNanos = 0
+
+        formatted = formatter.format(record)
+        log_dict = json.loads(formatted)
+
+        assert log_dict["timestamp"] == {"seconds": 1791590400, "nanos": 0}
+        assert log_dict["timestampSeconds"] == 1791590400
+        assert log_dict["timestampNanos"] == 0
+
     def test_format_adds_severity(self):
         """format() が severity フィールドを追加すること"""
         formatter = JsonFormatter()
