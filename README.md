@@ -416,7 +416,7 @@ setup_logging(rename_fields={"name": "logger"})
 
 名前が変わるのは、python-json-logger が出力するフィールドです。`name`・`message`・`stack_info` と、ログを書くときに渡すフィールド (引数 `extra` やモジュール `gnlog.context` で渡したフィールドと、ログのメッセージに渡した辞書のキー) の名前が変わります。`JsonFormatter` が後から入れるフィールド (`time`・`severity` など) の名前は変わりません。`message` の名前を変えた場合、`fingerprint` は名前を変えた後のフィールドの値から計算します。
 
-次の場合は、出力するフィールドの値が失われるか、`JsonFormatter` の処理が働かなくなるので、例外 `ValueError` になります。テキスト形式で出力する場合も、`setup_logging()` は同じ検査をします。
+`rename_fields` のキーと値が文字列でなければ、例外 `TypeError` になります。また、次の場合は、出力するフィールドの値が失われるか、`JsonFormatter` の処理が働かなくなるので、例外 `ValueError` になります。テキスト形式で出力する場合も、`setup_logging()` は同じ検査をします。
 
 - 下の表のキーを、`rename_fields` の変換前か変換後に使う。これらのキーは `JsonFormatter` が読み書きする
 - 複数のキーを同じ名前に変える (例: `{"a": "x", "b": "x"}`)

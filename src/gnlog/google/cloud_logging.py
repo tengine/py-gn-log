@@ -80,8 +80,18 @@ def validate_rename_fields(rename_fields: dict[str, str]) -> None:
         rename_fields: 変換前のキー名から変換後のキー名への辞書
 
     Raises:
+        TypeError: キーか値に文字列でないものがある場合
         ValueError: 上のどれかに当たる場合
     """
+    # 文字列でない値は JSON のキー null や 1 として出力され、文字列でないキーは
+    # どのフィールドの名前とも一致しないので、どちらも知らされずに残る
+    not_str = sorted(
+        repr(name)
+        for name in [*rename_fields, *rename_fields.values()]
+        if not isinstance(name, str)
+    )
+    if not_str:
+        raise TypeError(f"rename_fields keys and values must be str: {not_str}")
     reserved = sorted(
         (set(rename_fields) | set(rename_fields.values())) & _RENAME_RESERVED_KEYS
     )
@@ -154,6 +164,7 @@ class JsonFormatter(OriginalJsonFormatter):
                 このクラスが後から入れるフィールドの名前は変わらない。None (既定) なら名前を変えない
 
         Raises:
+            TypeError: rename_fields のキーか値に文字列でないものがある場合
             ValueError: rename_fields が、出力するフィールドの値を失わせる場合。
                 条件は関数 validate_rename_fields を参照
         """

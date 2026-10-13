@@ -441,6 +441,22 @@ class TestJsonFormatter:
         with pytest.raises(ValueError, match="rename_fields"):
             JsonFormatter(rename_fields=rename_fields)
 
+    @pytest.mark.parametrize(
+        "rename_fields",
+        [
+            {"name": None},
+            {"name": 1},
+            {"name": ["x"]},
+            {1: "x"},
+        ],
+    )
+    def test_rename_fields_rejects_keys_and_values_that_are_not_str(
+        self, rename_fields
+    ):
+        """引数 rename_fields のキーか値に文字列でないものがあれば TypeError にすること"""
+        with pytest.raises(TypeError, match="rename_fields"):
+            JsonFormatter(rename_fields=rename_fields)
+
     def test_rename_fields_allows_swapping_names(self):
         """名前を変えるフィールドどうしなら、変換後の名前が元の名前と同じでも受け付けること"""
         formatter = JsonFormatter(rename_fields={"name": "message", "message": "msg"})

@@ -174,6 +174,11 @@ class TestSetupLogging:
         with pytest.raises(ValueError, match="rename_fields"):
             setup_logging(verbose=False, json=False, rename_fields={"name": "severity"})
 
+    def test_setup_rejects_rename_fields_that_are_not_str_in_text_format(self):
+        """テキスト形式でも、文字列でない値を含む引数 rename_fields を拒むこと"""
+        with pytest.raises(TypeError, match="rename_fields"):
+            setup_logging(verbose=False, json=False, rename_fields={"name": None})
+
     def test_setup_respects_log_level_parameter(self):
         """log_level パラメータが反映されること"""
         setup = setup_logging(log_level=logging.DEBUG)

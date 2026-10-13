@@ -104,6 +104,8 @@ def setup_logging(
         組み込んだ handler と apply() を持つ LoggingSetup
 
     Raises:
+        TypeError: rename_fields のキーか値に文字列でないものがある場合。
+            テキスト形式で出力する場合も検査する
         ValueError: rename_fields が、出力するフィールドの値を失わせる場合 (条件は関数
             gnlog.google.cloud_logging.validate_rename_fields を参照)。
             テキスト形式で出力する場合も検査する
