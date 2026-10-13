@@ -63,8 +63,7 @@ def validate_rename_fields(rename_fields: dict[str, str]) -> None:
         ValueError: 変換前・変換後のどちらかに JsonFormatter が読み書きするキーが含まれる場合
     """
     reserved = sorted(
-        {key for key in rename_fields if key in _RENAME_RESERVED_KEYS}
-        | {key for key in rename_fields.values() if key in _RENAME_RESERVED_KEYS}
+        (set(rename_fields) | set(rename_fields.values())) & _RENAME_RESERVED_KEYS
     )
     if reserved:
         raise ValueError(
