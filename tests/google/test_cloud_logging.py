@@ -453,7 +453,7 @@ class TestJsonFormatter:
     def test_rename_fields_rejects_keys_and_values_that_are_not_str(
         self, rename_fields
     ):
-        """引数 rename_fields のキーか値に文字列でないものがあれば TypeError にすること"""
+        """引数 rename_fields のキーか値に文字列でないものがあれば例外 TypeError にすること"""
         with pytest.raises(TypeError, match="rename_fields"):
             JsonFormatter(rename_fields=rename_fields)
 
