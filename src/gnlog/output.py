@@ -177,16 +177,18 @@ def install(
 ) -> LoggingSetup:
     """handler をルートロガーに組み込む
 
-    gnlog.context の文脈を注入する Filter を handler に付け、ログレベルを設定し、
-    ルートロガーの既存 handler を取り除いてから追加します。
+    gnlog.context の文脈を注入する Filter を handler に付け、ルートロガーの既存 handler を
+    取り除いてから追加します。handler の level は設定しません。どの level の行を出力するかは、
+    ルートロガーの level と、各ロガーの level (apply() の引数 log_level など) で決まります。
 
     Args:
         handler: 組み込む handler
         log_level: ログレベル。None なら環境変数 LOG_LEVEL から取得
-        set_root_level: True ならルートロガーの level も log_level に揃える
+        set_root_level: True ならルートロガーの level を log_level にする
             (logging.basicConfig(level=...) と同じ振る舞い)。False ならルートロガーの
             level を変更しない (Python の既定は WARNING なので、apply() していない
-            ロガーの INFO / DEBUG は出力されない)
+            ロガーの INFO / DEBUG は出力されない。アプリがルートロガーの level を
+            log_level より低くしていた場合は、その level の行も出力される)
         verbose: True の場合、組み込みと apply() の過程を診断用に標準エラー出力へ出す。
             Cloud Run など標準エラー出力もログ基盤に取り込まれる環境では、構造化されて
             いないエントリとして混じるため、不要なら False を指定する
@@ -204,7 +206,8 @@ def install(
     # ログレベル（引数 > 環境変数 > デフォルト）
     if log_level is None:
         log_level = level.from_env()
-    handler.setLevel(log_level)
+    # handler の level は設定しない (NOTSET のまま)。handler でも log_level に絞ると、
+    # apply() で level を log_level より低くしたロガーの行まで捨てられる (#47)。
     setup.log_level_default = log_level
 
     # ルートロガーの既存ハンドラをクリア（重複出力を防ぐため）
@@ -213,7 +216,7 @@ def install(
         logging.root.handlers.clear()
     logging.root.addHandler(handler)
 
-    # ルートロガーの level を handler と揃える。これを行わないとルートの level は
+    # ルートロガーの level を log_level にする。これを行わないとルートの level は
     # Python の既定 (WARNING) のままなので、apply() していないロガーの INFO / DEBUG は
     # handler に届く前に捨てられる。
     if set_root_level:

@@ -183,7 +183,7 @@ class TestSetupLogging:
         """log_level パラメータが反映されること"""
         setup = setup_logging(log_level=logging.DEBUG)
         assert setup.log_level_default == logging.DEBUG
-        assert setup.handler.level == logging.DEBUG
+        assert logging.root.level == logging.DEBUG
 
     def test_setup_uses_env_log_level_when_none(self, monkeypatch):
         """log_level が None の場合、環境変数から読み込むこと"""
