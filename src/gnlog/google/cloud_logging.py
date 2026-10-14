@@ -83,8 +83,8 @@ def validate_rename_fields(rename_fields: dict[str, str]) -> None:
         TypeError: キーか値に文字列でないものがある場合
         ValueError: 上のどれかに当たる場合
     """
-    # 文字列でない値は JSON のキー null や 1 として出力され、文字列でないキーは
-    # どのフィールドの名前とも一致しないので、どちらも知らされずに残る
+    # 型注釈 dict[str, str] に反するキーと値は受け付けない。たとえば文字列でない値は、
+    # JSON のキー null や 1 として、利用者に知らされずに出力される
     not_str = sorted(
         repr(name)
         for name in [*rename_fields, *rename_fields.values()]
