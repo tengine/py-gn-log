@@ -185,6 +185,28 @@ class TestSetupLogging:
         assert setup.log_level_default == logging.DEBUG
         assert logging.root.level == logging.DEBUG
 
+    def test_applied_logger_below_log_level_is_output(self, capsys):
+        """log_level より低い level で apply() したロガーの行が、setup_logging の handler から出力されること (#47)
+
+        LOG_LEVEL=WARNING で運用するアプリでも、apply() したロガー (操作ログなど) の
+        INFO だけは出せるようにするため。setup_logging が handler の level を log_level に
+        すると、この行は捨てられる。
+        """
+        import json
+
+        setup = setup_logging(log_level=logging.WARNING, verbose=False, json=True)
+        logger_name = "test.cloud_run.applied_below_log_level"
+        try:
+            logger = setup.apply(logger_name, log_level=logging.INFO)
+            logger.info("INFO from a logger applied with INFO")
+        finally:
+            logging.getLogger(logger_name).setLevel(logging.NOTSET)
+
+        lines = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+        assert [line["message"] for line in lines] == [
+            "INFO from a logger applied with INFO"
+        ]
+
     def test_setup_uses_env_log_level_when_none(self, monkeypatch):
         """log_level が None の場合、環境変数から読み込むこと"""
         monkeypatch.setenv("LOG_LEVEL", "ERROR")
