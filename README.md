@@ -370,9 +370,13 @@ except ValidationError:
 
 - 残すのは、エラーごとの場所 (`loc`)・種類 (`type`)・説明 (`msg`) です。場所の要素のうち、番号と識別子の形の文字列でないもの (辞書のキーなど、入力の値でありうるもの) は `<key>` にします。
 - 説明 (`msg`) はそのまま出力します。独自の検証の関数が、入力の値を含むメッセージで例外を出すと、その値は残ります。
-- 連鎖のほかの例外のメッセージと、traceback のソースコードの行は変えません。
-- テキスト形式 (`output.text_handler()`) では、入力の値を除きません。
+- 連鎖のほかの例外と、traceback (ソースコードの行を含む) は、標準の traceback と同じ形で出力します。
 - py-gn-log は pydantic と FastAPI を import しません。読み込み済みのモジュールのクラスで、これらの例外を見分けます。
+
+入力の値を除くのは、ログを書くときに渡した例外 (`logger.exception()` や引数 `exc_info` で渡したもの) から作る、JSON 形式のフィールド `stack_trace` と `exc_info` だけです。ログのメッセージとテキスト形式 (`output.text_handler()`) の出力からは除きません。たとえば次の行では、入力の値がフィールド `message` に残ります。
+
+- `logger.error("会員の登録に失敗: %s", e)` のように、例外をメッセージに埋め込んだ行
+- `logging.handlers.QueueHandler` を通した行。QueueHandler は、record をキューに入れる前に、例外の traceback をメッセージに整形し、例外の情報 (`exc_info`) を外すため
 
 ### ログレベルのユーティリティ関数
 
