@@ -348,6 +348,32 @@ build_fingerprint("worker|orders", "create", "validation", "boom")
 # => sha1("worker\|orders|create|validation|boom")[:16]   (値の | は escape される)
 ```
 
+### 入力の検証の例外から入力の値を除く
+
+pydantic v2 の `ValidationError` と、FastAPI 0.100.0 以降の `RequestValidationError`・`ResponseValidationError` は、メッセージに検証に失敗した入力の値 (リクエストやレスポンスの本文。個人情報やトークンを含みうる) が入ります。JSON 形式では、例外の連鎖 (`__cause__`・`__context__`・`ExceptionGroup` の子) にこれらの例外があれば、そのメッセージから入力の値を除いて、フィールド `stack_trace` (severity WARNING 以下では `exc_info`) に出力します。
+
+```python
+import logging
+from pydantic import BaseModel, ValidationError
+
+class Member(BaseModel):
+    email: str
+    age: int
+
+try:
+    Member.model_validate(body)  # body は {"email": "taro@example.com", "age": "token-abc123"}
+except ValidationError:
+    logging.getLogger(__name__).exception("会員の登録に失敗")
+# stack_trace の最後の行:
+# pydantic_core._pydantic_core.ValidationError: 1 validation error(s) (input omitted): age [int_parsing] Input should be a valid integer, unable to parse string as an integer
+```
+
+- 残すのは、エラーごとの場所 (`loc`)・種類 (`type`)・説明 (`msg`) です。場所の要素のうち、番号と識別子の形の文字列でないもの (辞書のキーなど、入力の値でありうるもの) は `<key>` にします。
+- 説明 (`msg`) はそのまま出力します。独自の検証の関数が、入力の値を含むメッセージで例外を出すと、その値は残ります。
+- 連鎖のほかの例外のメッセージと、traceback のソースコードの行は変えません。
+- テキスト形式 (`output.text_handler()`) では、入力の値を除きません。
+- py-gn-log は pydantic と FastAPI を import しません。読み込み済みのモジュールのクラスで、これらの例外を見分けます。
+
 ### ログレベルのユーティリティ関数
 
 ```python
@@ -492,6 +518,7 @@ https://github.com/tengine/cloud-run-services-fastapi-example/pull/7
 - JSON 形式で出力するフィールドの名前を、引数 `rename_fields` で変えられるようにした (#41)。扱いは「出力するフィールドの名前を変える」を参照
 - ハンドラの level を設定しないようにした (#47)。`apply()` でロガーの level を `LOG_LEVEL` より低くすると、その level の行も出力される。どのロガーの行が出力されるかは「ルートロガーの level について」を参照
 - フィールド `stack_info` を、`stack_info=True` を指定した行だけに出力するようにした (#48)。これまでは、ほかの行にも値が `null` の `stack_info` を出力していた
+- 入力の検証の例外 (pydantic の `ValidationError`、FastAPI の `RequestValidationError`・`ResponseValidationError`) のメッセージから、入力の値を除いて出力するようにした (#49)。扱いは「入力の検証の例外から入力の値を除く」を参照
 
 #### 0.3.0 からの移行
 
@@ -501,6 +528,7 @@ https://github.com/tengine/cloud-run-services-fastapi-example/pull/7
 - `apply(log_level=...)` や `logging.getLogger(...).setLevel(...)` で、ロガーの level を `LOG_LEVEL` より低くしているコード (ライブラリを含む) がある場合は、`LOG_LEVEL` より低い level の行も出力されるようになります。`set_root_level=False` を指定し、ルートロガーの level を `LOG_LEVEL` より低くしている場合も同じです。子孫のロガーが level を引き継ぐ場合を含め、どのロガーの行が出力されるかは「ルートロガーの level について」を参照してください。これまでのようにハンドラでも `LOG_LEVEL` に絞るには、`setup_logging()` の戻り値 `setup` で `setup.handler.setLevel(setup.log_level_default)` を呼んでください。
 - 関数 `gnlog.output.install` に、level を設定した handler を渡している場合は、その level で行が絞られるようになります。これまでは `install()` が handler の level を、引数 `log_level` (省略したときは環境変数 `LOG_LEVEL`) の値で上書きしていました。handler の level で絞りたくない場合は、level を設定せずに渡してください。
 - `stack_info=True` を指定していない行には、フィールド `stack_info` が無くなります。出力にキー `stack_info` が必ずあることを前提にしている処理は、キーが無い行も扱えるように直してください。
+- 入力の検証の例外を記録した行では、`stack_trace` (severity WARNING 以下では `exc_info`) の、その例外のメッセージの形が変わります。ログのクエリやログベースの指標で、pydantic や FastAPI のメッセージの文字列を条件にしている場合は、新しい形 (「入力の検証の例外から入力の値を除く」を参照) に合わせて直してください。
 
 ### 0.3.0
 

@@ -13,8 +13,10 @@ time と severity フィールドを自動的に追加します。
 """
 
 import logging
+import sys
 import threading
 from collections import Counter
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from typing import Any
 
@@ -125,6 +127,119 @@ def validate_rename_fields(rename_fields: dict[str, str]) -> None:
         )
 
 
+def _validation_error_types() -> tuple[type[BaseException], ...]:
+    """入力の検証の例外のクラスを、読み込み済みのモジュールから取り出す
+
+    pydantic と FastAPI の入力の検証の例外は、メッセージに入力の値 (リクエストやレスポンスの
+    本文) が入る。このモジュールは pydantic と FastAPI を import しない。例外が作られていれば、
+    そのクラスのモジュールは読み込み済みなので、sys.modules から取り出せば足りる。
+
+    Returns:
+        クラス pydantic_core.ValidationError (pydantic.ValidationError と同じクラス) と、
+        クラス fastapi.exceptions.ValidationException (RequestValidationError と
+        ResponseValidationError の親クラス) のうち、読み込み済みのもの。
+        ValidationException の無い FastAPI (pydantic v1 を使う版) は対象にしない
+    """
+    types: list[type[BaseException]] = []
+    pydantic_core = sys.modules.get("pydantic_core")
+    if pydantic_core is not None:
+        types.append(pydantic_core.ValidationError)
+    fastapi_exceptions = sys.modules.get("fastapi.exceptions")
+    validation_exception = getattr(fastapi_exceptions, "ValidationException", None)
+    if validation_exception is not None:
+        types.append(validation_exception)
+    return tuple(types)
+
+
+def _exception_chain(exc: BaseException) -> Iterator[BaseException]:
+    """例外と、それにつながる例外 (__cause__・__context__・ExceptionGroup の子) を順にたどる"""
+    seen: set[int] = set()
+    stack = [exc]
+    while stack:
+        current = stack.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        yield current
+        stack.extend(
+            e for e in (current.__cause__, current.__context__) if e is not None
+        )
+        if isinstance(current, BaseExceptionGroup):
+            stack.extend(current.exceptions)
+
+
+def _loc_part_without_input(part: Any) -> str:
+    """入力の検証の例外の場所 (loc) の要素のうち、番号と識別子の形の文字列だけを残す
+
+    辞書の値を検証した例外では、辞書のキー (入力の値) が場所に入るため。
+    """
+    if isinstance(part, int) or (
+        isinstance(part, str) and part.isascii() and part.isidentifier()
+    ):
+        return str(part)
+    return "<key>"
+
+
+def _message_without_input(exc: Any) -> str:
+    """入力の検証の例外のメッセージを、場所 (loc)・種類 (type)・説明 (msg) だけで作る
+
+    例: ``1 validation error(s) (input omitted): age [int_parsing] Input should be a valid integer``
+    """
+    errors = list(exc.errors())
+    details = "; ".join(
+        f"{'.'.join(_loc_part_without_input(p) for p in e.get('loc', ()))} "
+        f"[{e.get('type')}] {e.get('msg')}"
+        for e in errors
+    )
+    return f"{len(errors)} validation error(s) (input omitted): {details}"
+
+
+def _without_input(
+    exc: BaseException,
+    types: tuple[type[BaseException], ...],
+    made: dict[int, BaseException],
+) -> BaseException:
+    """例外の連鎖を、入力の値を除いた代わりの例外で作り直す (元の例外は書き換えない)
+
+    代わりの例外は、元の例外と同じモジュール名・クラス名・traceback・注記 (__notes__) を持ち、
+    __cause__・__context__・ExceptionGroup の子も代わりの例外にする。入力の検証の例外の
+    メッセージは関数 _message_without_input で作り、ほかの例外のメッセージは変えない。
+
+    Args:
+        exc: 作り直す例外
+        types: 入力の検証の例外のクラス (関数 _validation_error_types の戻り値)
+        made: 作り直した例外の、元の例外の id から代わりの例外への辞書
+            (同じ例外が連鎖に何度出ても、代わりの例外を 1 つにするため)
+    """
+    if id(exc) in made:
+        return made[id(exc)]
+    cls = type(exc)
+    namespace = {"__module__": cls.__module__, "__qualname__": cls.__qualname__}
+    stand_in: BaseException
+    if isinstance(exc, BaseExceptionGroup):
+        children = [_without_input(e, types, made) for e in exc.exceptions]
+        stand_in = type(cls.__name__, (ExceptionGroup,), namespace)(
+            exc.message, children
+        )
+    elif isinstance(exc, types):
+        stand_in = type(cls.__name__, (Exception,), namespace)(
+            _message_without_input(exc)
+        )
+    else:
+        stand_in = type(cls.__name__, (Exception,), namespace)(str(exc))
+    made[id(exc)] = stand_in
+    stand_in.__traceback__ = exc.__traceback__
+    if exc.__cause__ is not None:
+        stand_in.__cause__ = _without_input(exc.__cause__, types, made)
+    if exc.__context__ is not None:
+        stand_in.__context__ = _without_input(exc.__context__, types, made)
+    stand_in.__suppress_context__ = exc.__suppress_context__
+    notes = getattr(exc, "__notes__", None)
+    if isinstance(notes, list):
+        stand_in.__notes__ = [str(n) for n in notes]
+    return stand_in
+
+
 class JsonFormatter(OriginalJsonFormatter):
     """Google Cloud Logging 向けの JSON フォーマッター
 
@@ -138,6 +253,10 @@ class JsonFormatter(OriginalJsonFormatter):
     Cloud Logging の文書では、これらは ``time`` より先に読まれます。
 
     フィールド ``stack_info`` は、``stack_info=True`` を指定してログを書いた行だけに出力します。
+
+    例外の連鎖に入力の検証の例外 (pydantic の ``ValidationError``、FastAPI の
+    ``RequestValidationError`` と ``ResponseValidationError``) があれば、その例外の
+    メッセージから入力の値を除き、場所・種類・説明だけを出力します (メソッド formatException)。
     """
 
     def __init__(
@@ -194,6 +313,32 @@ class JsonFormatter(OriginalJsonFormatter):
             指定した行にだけ python-json-logger が出力するのに任せる
         """
         return list(_PARSED_FIELDS)
+
+    # 戻り値の型は親クラス (python-json-logger) に合わせる。python-json-logger は、引数
+    # exc_info_as_array を指定すると行のリストを返すので、logging.Formatter の str と
+    # 合わない (python-json-logger 自身も type: ignore を付けている)
+    def formatException(self, ei: Any) -> str | list[str]:  # type: ignore[override]
+        """例外の情報を整形する (フィールド exc_info と stack_trace の値)
+
+        例外の連鎖 (__cause__・__context__・ExceptionGroup の子) に、入力の検証の例外
+        (pydantic と FastAPI) があれば、その例外のメッセージから入力の値を除いて出す (#49)。
+        連鎖に無ければ、親クラスと同じ形で出す。
+
+        Args:
+            ei: クラス logging.LogRecord の exc_info (例外のクラス・例外・traceback の組)
+        """
+        exc = ei[1]
+        types = _validation_error_types()
+        if (
+            exc is None
+            or not types
+            or not any(isinstance(e, types) for e in _exception_chain(exc))
+        ):
+            return super().formatException(ei)
+        stand_in = _without_input(exc, types, {})
+        return super().formatException(
+            (type(stand_in), stand_in, stand_in.__traceback__)
+        )
 
     def add_fields(
         self,
