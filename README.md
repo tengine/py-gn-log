@@ -165,11 +165,15 @@ Cloud Run 上かどうかの判定は `gnlog.google.cloud_run.is_cloud_run()` �
 {
   "name": "my_service",
   "message": "Service started",
-  "timestamp": "2025-01-15T10:30:45.123456Z",
+  "time": "2025-01-15T10:30:45.123456Z",
   "severity": "INFO",
   "user_id": 123
 }
 ```
+
+`time` は Cloud Logging がログエントリーの時刻として読むフィールドです。RFC 3339 形式 (UTC、マイクロ秒まで) で出力します。引数 `extra` などで渡したフィールド `time` は、この値で上書きされます。
+
+ログエントリーの時刻を呼び出し側で指定したいときは、キー `seconds` と `nanos` を持つオブジェクトのフィールド `timestamp` か、フィールド `timestampSeconds` と `timestampNanos` の組を `extra` などで渡します。クラス `gnlog.google.cloud_logging.JsonFormatter` (`setup_logging()` が JSON 形式で使う formatter) はこれらを上書きせずに出力し、[Cloud Logging の文書](https://cloud.google.com/logging/docs/agent/logging/configuration#special-fields)では、これらは `time` より先に読まれます。この文書は Logging エージェントの設定の文書ですが、[Cloud Run の文書](https://docs.cloud.google.com/run/docs/logging)も、構造化ログの特別なフィールドの説明としてこの文書を参照しています。
 
 ### リクエスト / タスク単位の文脈を全ログ行に付ける
 
@@ -440,6 +444,19 @@ client.setup_logging()
 https://github.com/tengine/cloud-run-services-fastapi-example/pull/7
 
 ## 変更履歴
+
+### 次の版 (未リリース)
+
+版の番号はリリースのときに決めます。**互換性のない変更を含みます**。
+
+- 時刻をフィールド `time` で出力するようにした (#40)。クラス `gnlog.google.cloud_logging.JsonFormatter` は、これまで出力していた文字列のフィールド `timestamp` を出力しない。`time` の扱いは「Cloud Run での使用」を参照
+- `extra` などで渡したフィールド `timestamp` を上書きしなくなった。扱いは「Cloud Run での使用」を参照
+
+#### 0.3.0 からの移行
+
+- `JsonFormatter` が出力していたフィールド `jsonPayload.timestamp` を参照しているログのクエリ・ログベースの指標・アラート・BigQuery のクエリは、新しい行で値を取得できなくなります。ログエントリーの時刻 (トップレベルの `timestamp`。BigQuery へのシンクのテーブルでは列 `timestamp`) を使うように直してください。
+- `extra` や `gnlog.context` でフィールド `time` を渡している場合は、別のキー名に変えてください。渡した値は `JsonFormatter` に上書きされます (「Cloud Run での使用」を参照)。
+- Cloud Logging の文書のとおりなら、ログエントリーの時刻は、Cloud Logging がログを取り込んだ時刻から、ログを書いた時刻 (`LogRecord` の作成時刻) に変わります。
 
 ### 0.3.0
 

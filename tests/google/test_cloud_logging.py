@@ -1,5 +1,6 @@
 import json
 import logging
+from datetime import UTC, datetime
 
 from gnlog.fingerprint import build_fingerprint
 from gnlog.google.cloud_logging import JsonFormatter
@@ -14,8 +15,8 @@ class TestJsonFormatter:
         fields = formatter.parse()
         assert fields == ["name", "message", "stack_info"]
 
-    def test_format_adds_timestamp(self):
-        """format() が timestamp フィールドを追加すること"""
+    def test_format_adds_time_in_rfc3339_utc(self):
+        """format() が時刻を RFC 3339 形式 (UTC、マイクロ秒まで) でフィールド time に入れること"""
         formatter = JsonFormatter()
         record = logging.LogRecord(
             name="test_logger",
@@ -26,14 +27,57 @@ class TestJsonFormatter:
             args=(),
             exc_info=None,
         )
+        record.created = datetime(2026, 10, 10, 0, 0, 0, 123456, tzinfo=UTC).timestamp()
 
         formatted = formatter.format(record)
         log_dict = json.loads(formatted)
 
-        assert "timestamp" in log_dict
-        # タイムスタンプ形式の検証（ISO 8601形式）
-        assert "T" in log_dict["timestamp"]
-        assert log_dict["timestamp"].endswith("Z")
+        assert log_dict["time"] == "2026-10-10T00:00:00.123456Z"
+        # Cloud Logging がログエントリーの時刻として読まない文字列のフィールド timestamp は出さない
+        assert "timestamp" not in log_dict
+
+    def test_format_overwrites_time_passed_by_extra(self):
+        """引数 extra で渡したフィールド time を、クラス LogRecord の作成時刻で上書きすること"""
+        formatter = JsonFormatter()
+        record = logging.LogRecord(
+            name="test_logger",
+            level=logging.INFO,
+            pathname="test.py",
+            lineno=10,
+            msg="Test message",
+            args=(),
+            exc_info=None,
+        )
+        record.created = datetime(2026, 10, 10, 0, 0, 0, 123456, tzinfo=UTC).timestamp()
+        record.time = "not a time"
+
+        formatted = formatter.format(record)
+        log_dict = json.loads(formatted)
+
+        assert log_dict["time"] == "2026-10-10T00:00:00.123456Z"
+
+    def test_format_keeps_entry_time_fields_passed_by_extra(self):
+        """extra で渡したログエントリーの時刻のフィールドを、上書きせずに出力すること"""
+        formatter = JsonFormatter()
+        record = logging.LogRecord(
+            name="test_logger",
+            level=logging.INFO,
+            pathname="test.py",
+            lineno=10,
+            msg="Test message",
+            args=(),
+            exc_info=None,
+        )
+        record.timestamp = {"seconds": 1791590400, "nanos": 0}
+        record.timestampSeconds = 1791590400
+        record.timestampNanos = 0
+
+        formatted = formatter.format(record)
+        log_dict = json.loads(formatted)
+
+        assert log_dict["timestamp"] == {"seconds": 1791590400, "nanos": 0}
+        assert log_dict["timestampSeconds"] == 1791590400
+        assert log_dict["timestampNanos"] == 0
 
     def test_format_adds_severity(self):
         """format() が severity フィールドを追加すること"""
