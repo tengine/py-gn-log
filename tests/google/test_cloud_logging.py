@@ -694,6 +694,38 @@ class TestValidationErrorInput:
             "Input should be a valid integer"
         ) in stack_trace
 
+    def test_fastapi_errors_that_are_not_dicts_omit_input(self):
+        """FastAPI の例外の errors() の要素が辞書でなくても、整形を失敗させずに、中身を出さないこと
+
+        FastAPI の ValidationException は、errors に任意の要素の列を受け付ける。
+        辞書でない要素は入力の値を含みうるので、型の名前だけを出す。
+        """
+        from fastapi.exceptions import RequestValidationError
+
+        try:
+            raise RequestValidationError([f"age is invalid: {self.SECRET}"])
+        except RequestValidationError as e:
+            stack_trace = self._format(e)["stack_trace"]
+        assert self.SECRET not in stack_trace
+        assert stack_trace.endswith(
+            "fastapi.exceptions.RequestValidationError: "
+            "1 validation error(s) (input omitted): <str>"
+        )
+
+    def test_fastapi_error_loc_that_is_a_str(self):
+        """errors() の要素の場所 (loc) が文字列なら、1 文字ずつではなく 1 つの要素として出すこと"""
+        from fastapi.exceptions import RequestValidationError
+
+        try:
+            raise RequestValidationError(
+                [{"type": "missing", "loc": "body", "msg": "Field required"}]
+            )
+        except RequestValidationError as e:
+            stack_trace = self._format(e)["stack_trace"]
+        assert stack_trace.endswith(
+            "1 validation error(s) (input omitted): body [missing] Field required"
+        )
+
     @pytest.mark.parametrize("link", ["cause", "context"])
     def test_validation_error_in_chain_omits_input(self, link):
         """例外の連鎖 (__cause__ か __context__) の中の入力の検証の例外も、入力の値を除いて出すこと

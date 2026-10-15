@@ -17,7 +17,7 @@ import sys
 import threading
 import traceback
 from collections import Counter
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from datetime import UTC, datetime
 from typing import Any
 
@@ -181,17 +181,30 @@ def _loc_part_without_input(part: Any) -> str:
     return "<key>"
 
 
+def _error_without_input(error: Any) -> str:
+    """入力の検証の例外の errors() の 1 つの要素を、場所 (loc)・種類 (type)・説明 (msg) だけで書く
+
+    pydantic の要素は辞書だが、FastAPI の ValidationException は任意の要素の列を受け付ける。
+    辞書でない要素は入力の値を含みうるので、中身を出さず、型の名前だけを ``<str>`` のように書く。
+    """
+    if not isinstance(error, Mapping):
+        return f"<{type(error).__name__}>"
+    loc = error.get("loc", ())
+    if isinstance(loc, str) or not isinstance(loc, Iterable):
+        loc = (loc,)
+    return (
+        f"{'.'.join(_loc_part_without_input(p) for p in loc)} "
+        f"[{error.get('type')}] {error.get('msg')}"
+    )
+
+
 def _message_without_input(exc: Any) -> str:
-    """入力の検証の例外のメッセージを、場所 (loc)・種類 (type)・説明 (msg) だけで作る
+    """入力の検証の例外のメッセージを、errors() の要素ごとに関数 _error_without_input で書いて作る
 
     例: ``1 validation error(s) (input omitted): age [int_parsing] Input should be a valid integer``
     """
     errors = list(exc.errors())
-    details = "; ".join(
-        f"{'.'.join(_loc_part_without_input(p) for p in e.get('loc', ()))} "
-        f"[{e.get('type')}] {e.get('msg')}"
-        for e in errors
-    )
+    details = "; ".join(_error_without_input(e) for e in errors)
     return f"{len(errors)} validation error(s) (input omitted): {details}"
 
 
