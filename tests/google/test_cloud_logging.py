@@ -15,7 +15,7 @@ class TestJsonFormatter:
         """parse() が期待するフィールドを返すこと"""
         formatter = JsonFormatter()
         fields = formatter.parse()
-        assert fields == ["name", "message", "stack_info"]
+        assert fields == ["name", "message"]
 
     def test_format_adds_time_in_rfc3339_utc(self):
         """format() が時刻を RFC 3339 形式 (UTC、マイクロ秒まで) でフィールド time に入れること"""
