@@ -131,6 +131,8 @@ class JsonFormatter(OriginalJsonFormatter):
     特別なフィールド (キー ``seconds`` と ``nanos`` を持つオブジェクトの ``timestamp``、
     ``timestampSeconds`` と ``timestampNanos`` の組) は上書きせずに出力します。
     Cloud Logging の文書では、これらは ``time`` より先に読まれます。
+
+    フィールド ``stack_info`` は、``stack_info=True`` を指定してログを書いた行だけに出力します。
     """
 
     def __init__(
@@ -183,6 +185,7 @@ class JsonFormatter(OriginalJsonFormatter):
         Returns:
             出力するフィールド名のリスト
             name: ロガー名、message: ログメッセージ、stack_info: スタックトレース情報
+            (値が無い行では、メソッド add_fields がキーを取り除く)
         """
         return list(_RECORD_FIELDS)
 
@@ -203,6 +206,13 @@ class JsonFormatter(OriginalJsonFormatter):
         """
         # 親クラスの add_fields を呼び出して基本フィールドを追加
         super().add_fields(log_data, record, message_dict)
+
+        # stack_info=True を指定していない行では、フィールド stack_info (引数 rename_fields で
+        # 名前を変えていればその名前) の値が None になる。python-json-logger は parse() が返す
+        # フィールドを値が None でも出力するので、値の無いキーを取り除く (#48)
+        stack_info_key = self.rename_fields.get("stack_info", "stack_info")
+        if log_data.get(stack_info_key) is None:
+            log_data.pop(stack_info_key, None)
 
         # 時刻を RFC 3339 形式 (UTC、マイクロ秒まで) の文字列でフィールド time に入れる。
         # Cloud Logging がログエントリーの時刻 (ログエントリーのフィールド LogEntry.timestamp)
