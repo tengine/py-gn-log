@@ -2,6 +2,8 @@ import json
 import logging
 from datetime import UTC, datetime
 
+import pytest
+
 from gnlog.fingerprint import build_fingerprint
 from gnlog.google.cloud_logging import JsonFormatter
 
@@ -377,6 +379,121 @@ class TestJsonFormatter:
         formatted = self._format_japanese_message(json_ensure_ascii=False)
         assert "マスタが未登録です" in formatted
         assert json.loads(formatted)["message"] == "マスタが未登録です"
+
+    def test_format_renames_fields_with_rename_fields(self):
+        """引数 rename_fields で、ロガー名と、引数 extra で渡したフィールドの名前が変わること"""
+        formatter = JsonFormatter(rename_fields={"name": "logger", "user_id": "uid"})
+        record = logging.LogRecord(
+            name="audit_log",
+            level=logging.INFO,
+            pathname="test.py",
+            lineno=10,
+            msg="Test message",
+            args=(),
+            exc_info=None,
+        )
+        record.user_id = 123
+        log_dict = json.loads(formatter.format(record))
+        assert log_dict["logger"] == "audit_log"
+        assert "name" not in log_dict
+        assert log_dict["uid"] == 123
+        assert "user_id" not in log_dict
+        # このクラスが後から入れるフィールドの名前は変わらない
+        assert log_dict["severity"] == "INFO"
+        assert "time" in log_dict
+
+    @pytest.mark.parametrize(
+        "key",
+        [
+            "time",
+            "level",
+            "severity",
+            "logging.googleapis.com/labels",
+            "exc_info",
+            "stack_trace",
+            "event",
+            "error_type",
+            "operation",
+            "fingerprint",
+        ],
+    )
+    def test_rename_fields_rejects_keys_the_formatter_reads_or_writes(self, key):
+        """このクラスが読み書きするキーは、引数 rename_fields の変換前にも変換後にも使えないこと"""
+        with pytest.raises(ValueError, match="rename_fields"):
+            JsonFormatter(rename_fields={key: "renamed"})
+        with pytest.raises(ValueError, match="rename_fields"):
+            JsonFormatter(rename_fields={"name": key})
+
+    @pytest.mark.parametrize(
+        "rename_fields",
+        [
+            # 複数のキーを同じ名前に変える
+            {"a": "x", "b": "x"},
+            # 名前を変えていない name・message・stack_info と同じ名前に変える
+            {"name": "message"},
+            {"user_id": "name"},
+            {"detail": "message"},
+            {"user_id": "stack_info"},
+        ],
+    )
+    def test_rename_fields_rejects_names_that_overlap(self, rename_fields):
+        """変換後の名前が重なり、片方の値が出力から失われる引数 rename_fields を拒むこと"""
+        with pytest.raises(ValueError, match="rename_fields"):
+            JsonFormatter(rename_fields=rename_fields)
+
+    @pytest.mark.parametrize(
+        "rename_fields",
+        [
+            {"name": None},
+            {"name": 1},
+            {"name": ["x"]},
+            {1: "x"},
+        ],
+    )
+    def test_rename_fields_rejects_keys_and_values_that_are_not_str(
+        self, rename_fields
+    ):
+        """引数 rename_fields のキーか値に文字列でないものがあれば例外 TypeError にすること"""
+        with pytest.raises(TypeError, match="rename_fields"):
+            JsonFormatter(rename_fields=rename_fields)
+
+    def test_rename_fields_allows_swapping_names(self):
+        """名前を変えるフィールドどうしなら、変換後の名前が元の名前と同じでも受け付けること"""
+        formatter = JsonFormatter(rename_fields={"name": "message", "message": "msg"})
+        record = logging.LogRecord(
+            name="audit_log",
+            level=logging.INFO,
+            pathname="test.py",
+            lineno=10,
+            msg="Test message",
+            args=(),
+            exc_info=None,
+        )
+        log_dict = json.loads(formatter.format(record))
+        assert log_dict["message"] == "audit_log"
+        assert log_dict["msg"] == "Test message"
+        assert "name" not in log_dict
+
+    def test_error_fields_fingerprint_uses_renamed_message(self):
+        """フィールド message の名前を変えても、出力したメッセージからフィールド fingerprint の値を計算すること"""
+        formatter = JsonFormatter(
+            error_event="app_error", rename_fields={"message": "msg"}
+        )
+        # 辞書を渡すと、python-json-logger は辞書のキー message の値を出力する
+        record = logging.LogRecord(
+            name="app.orders",
+            level=logging.ERROR,
+            pathname="test.py",
+            lineno=10,
+            msg={"message": "order 123 not found"},
+            args=(),
+            exc_info=None,
+        )
+        log_dict = json.loads(formatter.format(record))
+        assert log_dict["msg"] == "order 123 not found"
+        assert log_dict["fingerprint"] == build_fingerprint(
+            "", "app.orders", "unknown", "order 123 not found"
+        )
 
     def _format_with_exception(self, level: int) -> dict:
         import sys

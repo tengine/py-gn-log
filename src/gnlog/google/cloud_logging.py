@@ -14,6 +14,7 @@ time と severity フィールドを自動的に追加します。
 
 import logging
 import threading
+from collections import Counter
 from datetime import UTC, datetime
 from typing import Any
 
@@ -33,6 +34,90 @@ FINGERPRINT_KEY = "fingerprint"
 
 # error_type が指定されなかったときの値
 ERROR_TYPE_UNKNOWN = "unknown"
+
+# python-json-logger がクラス logging.LogRecord から出力するフィールド
+# (クラス JsonFormatter のメソッド parse が返すもの)
+_RECORD_FIELDS: tuple[str, ...] = ("name", "message", "stack_info")
+
+# クラス JsonFormatter が、親クラスのメソッド add_fields の後で読み書きするキー。
+# 引数 rename_fields の変換前・変換後に使うと、値がフォーマッターに上書きされるか、
+# フォーマッターの処理 (フィールド severity の決定、フィールド stack_trace への載せ替え、
+# 引数 error_event のフィールド) が働かなくなるので受け付けない
+_RENAME_RESERVED_KEYS: frozenset[str] = frozenset(
+    {
+        "time",
+        "level",
+        "severity",
+        CLOUD_LOGGING_LABELS_KEY,
+        "exc_info",
+        "stack_trace",
+        ERROR_EVENT_KEY,
+        ERROR_TYPE_KEY,
+        OPERATION_KEY,
+        FINGERPRINT_KEY,
+    }
+)
+
+
+def validate_rename_fields(rename_fields: dict[str, str]) -> None:
+    """引数 rename_fields が、出力するフィールドの値を失わせないかを検査する
+
+    次のどれかに当たると、値がフォーマッターに上書きされるか、フォーマッターの処理が
+    働かなくなるか、名前が重なった片方の値が出力から失われるので受け付けない。
+
+    - 変換前・変換後のどちらかに、クラス JsonFormatter が読み書きするキー (``time``・
+      ``level``・``severity``・``logging.googleapis.com/labels``・``exc_info``・
+      ``stack_trace``・``event``・``error_type``・``operation``・``fingerprint``) がある
+    - 複数の変換前の名前を、同じ変換後の名前に対応させている
+    - 変換後の名前が、名前を変えていないフィールド ``name``・``message``・``stack_info``
+      と同じ (``{"name": "message", "message": "msg"}`` のように、そのフィールドの名前も
+      変えるなら受け付ける)
+
+    ログを書くときに渡すキー (引数 extra などで渡すキーと、ログのメッセージに渡す辞書のキー)
+    との重なりは、ここでは分からないので検査しない。
+
+    Args:
+        rename_fields: 変換前のキー名から変換後のキー名への辞書
+
+    Raises:
+        TypeError: キーか値に文字列でないものがある場合
+        ValueError: 上のどれかに当たる場合
+    """
+    # 型注釈 dict[str, str] に反するキーと値は受け付けない。たとえば文字列でない値は、
+    # JSON のキー null や 1 として、利用者に知らされずに出力される
+    not_str = sorted(
+        repr(name)
+        for name in [*rename_fields, *rename_fields.values()]
+        if not isinstance(name, str)
+    )
+    if not_str:
+        raise TypeError(f"rename_fields keys and values must be str: {not_str}")
+    reserved = sorted(
+        (set(rename_fields) | set(rename_fields.values())) & _RENAME_RESERVED_KEYS
+    )
+    if reserved:
+        raise ValueError(
+            f"rename_fields conflicts with keys JsonFormatter reads or writes: {reserved}. "
+            "Choose different key names."
+        )
+    duplicated = sorted(
+        name for name, count in Counter(rename_fields.values()).items() if count > 1
+    )
+    if duplicated:
+        raise ValueError(
+            f"rename_fields maps multiple keys to the same name: {duplicated}. "
+            "Choose different key names."
+        )
+    overwritten = sorted(
+        name
+        for name in set(rename_fields.values())
+        if name in _RECORD_FIELDS and name not in rename_fields
+    )
+    if overwritten:
+        raise ValueError(
+            f"rename_fields renames keys to names of fields that are not renamed: {overwritten}. "
+            "Rename those fields as well, or choose different key names."
+        )
 
 
 class JsonFormatter(OriginalJsonFormatter):
@@ -54,6 +139,7 @@ class JsonFormatter(OriginalJsonFormatter):
         json_ensure_ascii: bool = True,
         error_event: str | None = None,
         surface: str | None = None,
+        rename_fields: dict[str, str] | None = None,
     ) -> None:
         """JsonFormatter を初期化
 
@@ -71,8 +157,22 @@ class JsonFormatter(OriginalJsonFormatter):
                 出力する。Cloud Logging 上の見え方はどちらでも変わらないが、標準出力を
                 直接読む場面 (ローカル実行、docker logs、CI のログ) では False のほうが
                 読みやすい
+            rename_fields: 出力するフィールドの、変換前の名前から変換後の名前への辞書 (例: ``{"name": "logger"}``)。
+                python-json-logger の同名の引数にそのまま渡す。名前が変わるのは
+                python-json-logger が出力するフィールド (``name``・``message``・``stack_info``
+                と、引数 extra などで渡したフィールドと、ログのメッセージに渡した辞書のキー) で、
+                このクラスが後から入れるフィールドの名前は変わらない。None (既定) なら名前を変えない
+
+        Raises:
+            TypeError: rename_fields のキーか値に文字列でないものがある場合
+            ValueError: rename_fields が、出力するフィールドの値を失わせる場合。
+                条件は関数 validate_rename_fields を参照
         """
-        super().__init__(json_ensure_ascii=json_ensure_ascii)
+        if rename_fields is not None:
+            validate_rename_fields(rename_fields)
+        super().__init__(
+            json_ensure_ascii=json_ensure_ascii, rename_fields=rename_fields
+        )
         self._labels = labels or {}
         self._error_event = error_event
         self._surface = surface or ""
@@ -84,7 +184,7 @@ class JsonFormatter(OriginalJsonFormatter):
             出力するフィールド名のリスト
             name: ロガー名、message: ログメッセージ、stack_info: スタックトレース情報
         """
-        return ["name", "message", "stack_info"]
+        return list(_RECORD_FIELDS)
 
     def add_fields(
         self,
@@ -169,7 +269,8 @@ class JsonFormatter(OriginalJsonFormatter):
         log_data[ERROR_TYPE_KEY] = error_type
         log_data[OPERATION_KEY] = operation
         if FINGERPRINT_KEY not in log_data:
-            message = log_data.get("message")
+            # 引数 rename_fields でフィールド message の名前を変えていても、出力した値を読む
+            message = log_data.get(self.rename_fields.get("message", "message"))
             if not isinstance(message, str):
                 message = record.getMessage()
             log_data[FINGERPRINT_KEY] = fingerprint.build_fingerprint(
