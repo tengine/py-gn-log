@@ -668,10 +668,38 @@ class TestValidationErrorInput:
         assert self.SECRET not in stack_trace
         assert self.EMAIL not in stack_trace
         assert "Traceback (most recent call last)" in stack_trace
-        assert (
+        assert stack_trace.endswith(
             "pydantic_core._pydantic_core.ValidationError: "
-            "1 validation error(s) (input omitted): age [int_parsing] "
-        ) in stack_trace
+            "1 validation error(s) (input omitted): age [int_parsing]"
+        )
+
+    def test_pydantic_message_with_input_is_not_output(self):
+        """pydantic の組み込みの説明 (msg) も出さないこと
+
+        説明には、タグで型を選ぶ union (discriminated union) のタグの値のように、入力の値を
+        埋め込むものがある。
+        """
+        from typing import Literal
+
+        import pydantic
+
+        class Cat(pydantic.BaseModel):
+            kind: Literal["cat"]
+
+        class Dog(pydantic.BaseModel):
+            kind: Literal["dog"]
+
+        class Pet(pydantic.BaseModel):
+            pet: Cat | Dog = pydantic.Field(discriminator="kind")
+
+        try:
+            Pet.model_validate({"pet": {"kind": self.SECRET}})
+        except pydantic.ValidationError as e:
+            stack_trace = self._format(e)["stack_trace"]
+        assert self.SECRET not in stack_trace
+        assert stack_trace.endswith(
+            "1 validation error(s) (input omitted): pet [union_tag_invalid]"
+        )
 
     def test_warning_exc_info_omits_input(self):
         """WARNING 以下で出すフィールド exc_info からも、入力の値を除くこと"""
@@ -688,11 +716,10 @@ class TestValidationErrorInput:
         stack_trace = self._format(self._fastapi_error(name))["stack_trace"]
         assert self.SECRET not in stack_trace
         assert self.EMAIL not in stack_trace
-        assert (
+        assert stack_trace.endswith(
             f"fastapi.exceptions.{name}: "
-            "1 validation error(s) (input omitted): body.age [int_parsing] "
-            "Input should be a valid integer"
-        ) in stack_trace
+            "1 validation error(s) (input omitted): body.age [int_parsing]"
+        )
 
     def test_fastapi_errors_that_are_not_dicts_omit_input(self):
         """FastAPI の例外の errors() の要素が辞書でなくても、整形を失敗させずに、中身を出さないこと
@@ -723,7 +750,7 @@ class TestValidationErrorInput:
         except RequestValidationError as e:
             stack_trace = self._format(e)["stack_trace"]
         assert stack_trace.endswith(
-            "1 validation error(s) (input omitted): body [missing] Field required"
+            "1 validation error(s) (input omitted): body [missing]"
         )
 
     @pytest.mark.parametrize(
@@ -731,7 +758,7 @@ class TestValidationErrorInput:
         [
             (None, "<NoneType>"),
             (f"age is invalid: {SECRET}", "<str>"),
-            ({"loc": ("age",), "type": "t", "msg": "m"}, "age [t] m"),
+            ({"loc": ("age",), "type": "t", "msg": "m"}, "age [t]"),
         ],
     )
     def test_fastapi_errors_that_are_not_a_sequence(self, errors, expected):
@@ -751,21 +778,24 @@ class TestValidationErrorInput:
             f"1 validation error(s) (input omitted): {expected}"
         )
 
-    def test_fastapi_error_values_that_are_not_str(self):
-        """errors() の要素の種類 (type)・説明 (msg) が文字列でなければ型の名前だけを、場所 (loc) が bytes なら <key> を出すこと
+    @pytest.mark.parametrize("kind", [None, f"bad type: {SECRET}"])
+    def test_fastapi_error_values_that_are_not_identifiers(self, kind):
+        """errors() の要素の種類 (type) が識別子の形の文字列でなければ型の名前だけを、場所 (loc) が bytes なら <key> を出すこと
 
-        文字列でない値は入力の値を含みうる。bytes の場所を 1 バイトずつ数字で出すと、中身が読めてしまう。
+        アプリが作る FastAPI の例外では、種類にも任意の値が入りうる。bytes の場所を 1 バイトずつ
+        数字で出すと、中身が読めてしまう。
         """
         from fastapi.exceptions import RequestValidationError
 
-        errors = [{"loc": self.SECRET.encode(), "msg": {"value": self.SECRET}}]
+        errors = [{"loc": self.SECRET.encode(), "type": kind, "msg": self.SECRET}]
         try:
             raise RequestValidationError(errors)
         except RequestValidationError as e:
             stack_trace = self._format(e)["stack_trace"]
         assert self.SECRET not in stack_trace
+        expected = "<NoneType>" if kind is None else "<str>"
         assert stack_trace.endswith(
-            "1 validation error(s) (input omitted): <key> [<NoneType>] <dict>"
+            f"1 validation error(s) (input omitted): <key> [{expected}]"
         )
 
     @pytest.mark.parametrize("link", ["cause", "context"])

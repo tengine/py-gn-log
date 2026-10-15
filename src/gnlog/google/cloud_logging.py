@@ -194,35 +194,36 @@ def _as_list(value: Any) -> list[Any]:
     return list(value)
 
 
-def _str_without_input(value: Any) -> str:
-    """入力の検証の例外の errors() の要素の種類 (type) か説明 (msg) を書く
+def _type_without_input(value: Any) -> str:
+    """入力の検証の例外の errors() の要素の種類 (type) を書く
 
-    文字列ならそのまま書き、文字列でなければ、入力の値を含みうるので中身を出さず、
-    型の名前だけを ``<dict>`` のように書く (無いときの None も ``<NoneType>`` になる)。
+    pydantic の種類はすべて識別子の形の名前 (int_parsing など) だが、アプリが作る FastAPI の
+    例外には任意の値が入りうる。識別子の形の文字列でなければ、入力の値を含みうるので
+    中身を出さず、型の名前だけを ``<str>`` のように書く (無いときの None も ``<NoneType>`` になる)。
     """
-    if isinstance(value, str):
+    if isinstance(value, str) and value.isascii() and value.isidentifier():
         return value
     return f"<{type(value).__name__}>"
 
 
 def _error_without_input(error: Any) -> str:
-    """入力の検証の例外の errors() の 1 つの要素を、場所 (loc)・種類 (type)・説明 (msg) だけで書く
+    """入力の検証の例外の errors() の 1 つの要素を、場所 (loc) と種類 (type) だけで書く
 
+    説明 (msg) は書かない。pydantic の組み込みの説明にも、タグで型を選ぶ union のタグの値の
+    ように、入力の値を埋め込むものがあるため。
     pydantic の要素は辞書だが、FastAPI の ValidationException は任意の要素の列を受け付ける。
     辞書でない要素は入力の値を含みうるので、中身を出さず、型の名前だけを ``<str>`` のように書く。
     """
     if not isinstance(error, Mapping):
         return f"<{type(error).__name__}>"
     loc = ".".join(_loc_part_without_input(p) for p in _as_list(error.get("loc", ())))
-    kind = _str_without_input(error.get("type"))
-    description = _str_without_input(error.get("msg"))
-    return f"{loc} [{kind}] {description}"
+    return f"{loc} [{_type_without_input(error.get('type'))}]"
 
 
 def _message_without_input(exc: Any) -> str:
     """入力の検証の例外のメッセージを、errors() の要素ごとに関数 _error_without_input で書いて作る
 
-    例: ``1 validation error(s) (input omitted): age [int_parsing] Input should be a valid integer``
+    例: ``1 validation error(s) (input omitted): age [int_parsing]``
     """
     errors = _as_list(exc.errors())
     details = "; ".join(_error_without_input(e) for e in errors)
@@ -289,7 +290,7 @@ class JsonFormatter(OriginalJsonFormatter):
 
     例外の連鎖に入力の検証の例外 (pydantic の ``ValidationError``、FastAPI の
     ``RequestValidationError`` と ``ResponseValidationError``) があれば、その例外の
-    メッセージから入力の値を除き、場所・種類・説明だけを出力します (メソッド formatException)。
+    メッセージから入力の値を除き、場所と種類だけを出力します (メソッド formatException)。
     """
 
     def __init__(

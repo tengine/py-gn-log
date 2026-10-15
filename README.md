@@ -365,12 +365,12 @@ try:
 except ValidationError:
     logging.getLogger(__name__).exception("会員の登録に失敗")
 # stack_trace の最後の行:
-# pydantic_core._pydantic_core.ValidationError: 1 validation error(s) (input omitted): age [int_parsing] Input should be a valid integer, unable to parse string as an integer
+# pydantic_core._pydantic_core.ValidationError: 1 validation error(s) (input omitted): age [int_parsing]
 ```
 
-- 残すのは、エラーごとの場所 (`loc`)・種類 (`type`)・説明 (`msg`) です。場所の要素のうち、番号と識別子の形の文字列でないもの (辞書のキーなど、入力の値でありうるもの) は `<key>` にします。
-- 説明 (`msg`) は、文字列ならそのまま出力します。独自の検証の関数が、入力の値を含むメッセージで例外を出すと、その値は残ります。
-- FastAPI の例外は、エラーとして任意の値を受け付けます。エラーの列でない値 (`None`・文字列・辞書など) は 1 つのエラーとして扱います。辞書でないエラーと、文字列でない種類・説明は、入力の値を含みうるので、中身を出さずに `<str>` や `<dict>` のように型の名前だけを出力します。
+- 残すのは、エラーごとの場所 (`loc`) と種類 (`type`) です。場所の要素のうち、番号と識別子の形の文字列でないもの (辞書のキーなど、入力の値でありうるもの) は `<key>` にします。
+- 説明 (`msg`) は出力しません。pydantic の組み込みの説明にも、タグで型を選ぶ union のタグの値のように、入力の値を埋め込むものがあるためです。説明は、種類の名前 (`int_parsing` など) で pydantic の文書を引いて調べてください。
+- FastAPI の例外は、エラーとして任意の値を受け付けます。エラーの列でない値 (`None`・文字列・辞書など) は 1 つのエラーとして扱います。辞書でないエラーと、識別子の形の文字列でない種類 (pydantic 2.14.1 では、種類はすべて識別子の形) は、入力の値を含みうるので、中身を出さずに `<str>` のように型の名前だけを出力します。
 - 連鎖のほかの例外と、traceback (ソースコードの行を含む) は、標準の traceback と同じ形で出力します。
 - py-gn-log は pydantic と FastAPI を import しません。読み込み済みのモジュールのクラスで、これらの例外を見分けます。
 - 入力の値を除く処理は、Python の `traceback.TracebackException` の非公開の属性に頼っています。その属性が使われなくなった Python の版では、入力の値を出力しないように、入力の検証の例外を含む行の整形を例外 `RuntimeError` で止めます。その行は出力されず、標準エラー出力に `--- Logging error ---` と `RuntimeError` が出ます。標準エラー出力の traceback にも、入力の検証の例外は含めません。
