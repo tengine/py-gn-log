@@ -179,16 +179,20 @@ def install(
 
     gnlog.context の文脈を注入する Filter を handler に付け、ルートロガーの既存 handler を
     取り除いてから追加します。handler の level は設定しません。どの level の行を出力するかは、
-    ルートロガーの level と、各ロガーの level (apply() の引数 log_level など) で決まります。
+    行を出したロガーの実効 level (ロガー自身の level。設定していなければ、親のロガーを
+    たどって最初に見つかった level) で決まります。apply() でロガーの level を設定すると、
+    その level を引き継ぐ子孫のロガー (自身にも、間のロガーにも level を設定していないもの)
+    にも、その level が及びます。
 
     Args:
         handler: 組み込む handler
         log_level: ログレベル。None なら環境変数 LOG_LEVEL から取得
         set_root_level: True ならルートロガーの level を log_level にする
             (logging.basicConfig(level=...) と同じ振る舞い)。False ならルートロガーの
-            level を変更しない (Python の既定は WARNING なので、apply() していない
-            ロガーの INFO / DEBUG は出力されない。アプリがルートロガーの level を
-            log_level より低くしていた場合は、その level の行も出力される)
+            level を変更しない (Python の既定は WARNING なので、ルートロガーの level を
+            引き継ぐロガーの INFO / DEBUG は出力されない。アプリがルートロガーの level を
+            log_level より低くしていた場合は、ルートロガーの level を引き継ぐロガーから、
+            その level の行が出力される)
         verbose: True の場合、組み込みと apply() の過程を診断用に標準エラー出力へ出す。
             Cloud Run など標準エラー出力もログ基盤に取り込まれる環境では、構造化されて
             いないエントリとして混じるため、不要なら False を指定する

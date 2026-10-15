@@ -64,9 +64,9 @@ logger.error("An error occurred")
 
 `setup_logging()` はルートロガーの level を設定します (`logging.basicConfig(level=...)` と同じ振る舞い)。そのため `apply()` していないモジュールのロガー (`logging.getLogger(__name__)` で取得しただけのもの) からの INFO / DEBUG も出力されます。
 
-ハンドラの level は設定しません。どの level の行を出力するかは、ルートロガーの level と、各ロガーの level で決まります。そのため、`apply()` で 1 つのロガーの level を `LOG_LEVEL` より低くすると、そのロガーの行は出力されます (「ロガーごとに異なる設定を適用」を参照)。
+ハンドラの level は設定しません。どの level の行を出力するかは、行を出したロガーの実効 level (ロガー自身の level。設定していなければ、親のロガーをたどって最初に見つかった level) で決まります。そのため、`apply()` でロガーの level を `LOG_LEVEL` より低くすると、そのロガーと、その level を引き継ぐ子孫のロガー (ロガー `app` に対する `app.db` など。自身にも、間のロガーにも level を設定していないもの) から、その level の行が出力されます (「ロガーごとに異なる設定を適用」を参照)。
 
-ルートロガーの level を変更したくない場合は `set_root_level=False` を指定してください。この場合、ルートロガーの level は Python の既定 (WARNING) のままなので、`apply()` していないロガーの INFO / DEBUG は出力されません。アプリがルートロガーの level を `LOG_LEVEL` より低くしていた場合は、その level の行も出力されます。
+ルートロガーの level を変更したくない場合は `set_root_level=False` を指定してください。この場合、ルートロガーの level は Python の既定 (WARNING) のままなので、ルートロガーの level を引き継ぐロガー (自身にも、ルートロガーとの間のロガーにも level を設定していないもの。`apply()` していないモジュールのロガーなど) の INFO / DEBUG は出力されません。アプリがルートロガーの level を `LOG_LEVEL` より低くしていた場合は、ルートロガーの level を引き継ぐロガーから、その level の行が出力されます。
 
 ```python
 from gnlog.google.cloud_run import setup_logging
@@ -380,7 +380,7 @@ isolated_logger = setup.apply("isolated", propagate=False)
 clean_logger = setup.apply("clean", clear_handlers=True, add_handler=True)
 ```
 
-ハンドラは level で絞らないので、`apply()` で `LOG_LEVEL` より低い level を指定したロガーの行も出力されます。たとえば `LOG_LEVEL=WARNING` で運用するアプリでも、`setup.apply("audit_log", log_level=logging.INFO)` としたロガー `audit_log` の INFO は出力されます。
+ハンドラは level で絞らないので、`LOG_LEVEL=WARNING` で運用するアプリでも、`setup.apply("audit_log", log_level=logging.INFO)` としたロガー `audit_log` の INFO は出力されます。子孫のロガーが level を引き継ぐ場合を含め、どのロガーの行が出力されるかは「ルートロガーの level について」を参照してください。
 
 #### 別の provider や独自の formatter を使う
 
@@ -486,14 +486,14 @@ https://github.com/tengine/cloud-run-services-fastapi-example/pull/7
 - 時刻をフィールド `time` で出力するようにした (#40)。クラス `gnlog.google.cloud_logging.JsonFormatter` は、これまで出力していた文字列のフィールド `timestamp` を出力しない。`time` の扱いは「Cloud Run での使用」を参照
 - `extra` などで渡したフィールド `timestamp` を上書きしなくなった。扱いは「Cloud Run での使用」を参照
 - JSON 形式で出力するフィールドの名前を、引数 `rename_fields` で変えられるようにした (#41)。扱いは「出力するフィールドの名前を変える」を参照
-- ハンドラの level を設定しないようにした (#47)。`apply()` で level を `LOG_LEVEL` より低くしたロガーの行も出力される。扱いは「ルートロガーの level について」を参照
+- ハンドラの level を設定しないようにした (#47)。`apply()` でロガーの level を `LOG_LEVEL` より低くすると、その level の行も出力される。どのロガーの行が出力されるかは「ルートロガーの level について」を参照
 
 #### 0.3.0 からの移行
 
 - `JsonFormatter` が出力していたフィールド `jsonPayload.timestamp` を参照しているログのクエリ・ログベースの指標・アラート・BigQuery のクエリは、新しい行で値を取得できなくなります。ログエントリーの時刻 (トップレベルの `timestamp`。BigQuery へのシンクのテーブルでは列 `timestamp`) を使うように直してください。
 - `extra` や `gnlog.context` でフィールド `time` を渡している場合は、別のキー名に変えてください。渡した値は `JsonFormatter` に上書きされます (「Cloud Run での使用」を参照)。
 - Cloud Logging の文書のとおりなら、ログエントリーの時刻は、Cloud Logging がログを取り込んだ時刻から、ログを書いた時刻 (`LogRecord` の作成時刻) に変わります。
-- `apply(log_level=...)` や `logging.getLogger(...).setLevel(...)` で、ロガーの level を `LOG_LEVEL` より低くしているコード (ライブラリを含む) がある場合は、そのロガーの `LOG_LEVEL` より低い level の行も出力されるようになります。`set_root_level=False` を指定し、ルートロガーの level を `LOG_LEVEL` より低くしている場合は、すべてのロガーで同じことが起きます。これまでのようにハンドラでも `LOG_LEVEL` に絞るには、`setup_logging()` の戻り値 `setup` で `setup.handler.setLevel(setup.log_level_default)` を呼んでください。
+- `apply(log_level=...)` や `logging.getLogger(...).setLevel(...)` で、ロガーの level を `LOG_LEVEL` より低くしているコード (ライブラリを含む) がある場合は、`LOG_LEVEL` より低い level の行も出力されるようになります。`set_root_level=False` を指定し、ルートロガーの level を `LOG_LEVEL` より低くしている場合も同じです。子孫のロガーが level を引き継ぐ場合を含め、どのロガーの行が出力されるかは「ルートロガーの level について」を参照してください。これまでのようにハンドラでも `LOG_LEVEL` に絞るには、`setup_logging()` の戻り値 `setup` で `setup.handler.setLevel(setup.log_level_default)` を呼んでください。
 
 ### 0.3.0
 
