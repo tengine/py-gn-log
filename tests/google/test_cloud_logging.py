@@ -726,6 +726,48 @@ class TestValidationErrorInput:
             "1 validation error(s) (input omitted): body [missing] Field required"
         )
 
+    @pytest.mark.parametrize(
+        ("errors", "expected"),
+        [
+            (None, "<NoneType>"),
+            (f"age is invalid: {SECRET}", "<str>"),
+            ({"loc": ("age",), "type": "t", "msg": "m"}, "age [t] m"),
+        ],
+    )
+    def test_fastapi_errors_that_are_not_a_sequence(self, errors, expected):
+        """FastAPI の例外の errors() が要素の列でなければ、1 つの要素として扱うこと
+
+        反復できない値で整形を失敗させず、文字列や辞書を 1 文字ずつ・キーごとに数えないため。
+        辞書でない値は、要素と同じく中身を出さない。
+        """
+        from fastapi.exceptions import RequestValidationError
+
+        try:
+            raise RequestValidationError(errors)
+        except RequestValidationError as e:
+            stack_trace = self._format(e)["stack_trace"]
+        assert self.SECRET not in stack_trace
+        assert stack_trace.endswith(
+            f"1 validation error(s) (input omitted): {expected}"
+        )
+
+    def test_fastapi_error_values_that_are_not_str(self):
+        """errors() の要素の種類 (type)・説明 (msg) が文字列でなければ型の名前だけを、場所 (loc) が bytes なら <key> を出すこと
+
+        文字列でない値は入力の値を含みうる。bytes の場所を 1 バイトずつ数字で出すと、中身が読めてしまう。
+        """
+        from fastapi.exceptions import RequestValidationError
+
+        errors = [{"loc": self.SECRET.encode(), "msg": {"value": self.SECRET}}]
+        try:
+            raise RequestValidationError(errors)
+        except RequestValidationError as e:
+            stack_trace = self._format(e)["stack_trace"]
+        assert self.SECRET not in stack_trace
+        assert stack_trace.endswith(
+            "1 validation error(s) (input omitted): <key> [<NoneType>] <dict>"
+        )
+
     @pytest.mark.parametrize("link", ["cause", "context"])
     def test_validation_error_in_chain_omits_input(self, link):
         """例外の連鎖 (__cause__ か __context__) の中の入力の検証の例外も、入力の値を除いて出すこと

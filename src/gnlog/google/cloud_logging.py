@@ -181,6 +181,30 @@ def _loc_part_without_input(part: Any) -> str:
     return "<key>"
 
 
+def _as_list(value: Any) -> list[Any]:
+    """入力の検証の例外の errors() の戻り値か、その要素の場所 (loc) を、要素の列にする
+
+    FastAPI の ValidationException は errors に任意の値を受け付ける。文字列・bytes・辞書は
+    反復すると 1 文字・1 バイト・1 キーずつになるので、反復できない値と同じく 1 つの要素として扱う。
+    """
+    if isinstance(value, (str, bytes, bytearray, Mapping)) or not isinstance(
+        value, Iterable
+    ):
+        return [value]
+    return list(value)
+
+
+def _str_without_input(value: Any) -> str:
+    """入力の検証の例外の errors() の要素の種類 (type) か説明 (msg) を書く
+
+    文字列ならそのまま書き、文字列でなければ、入力の値を含みうるので中身を出さず、
+    型の名前だけを ``<dict>`` のように書く (無いときの None も ``<NoneType>`` になる)。
+    """
+    if isinstance(value, str):
+        return value
+    return f"<{type(value).__name__}>"
+
+
 def _error_without_input(error: Any) -> str:
     """入力の検証の例外の errors() の 1 つの要素を、場所 (loc)・種類 (type)・説明 (msg) だけで書く
 
@@ -189,13 +213,10 @@ def _error_without_input(error: Any) -> str:
     """
     if not isinstance(error, Mapping):
         return f"<{type(error).__name__}>"
-    loc = error.get("loc", ())
-    if isinstance(loc, str) or not isinstance(loc, Iterable):
-        loc = (loc,)
-    return (
-        f"{'.'.join(_loc_part_without_input(p) for p in loc)} "
-        f"[{error.get('type')}] {error.get('msg')}"
-    )
+    loc = ".".join(_loc_part_without_input(p) for p in _as_list(error.get("loc", ())))
+    kind = _str_without_input(error.get("type"))
+    description = _str_without_input(error.get("msg"))
+    return f"{loc} [{kind}] {description}"
 
 
 def _message_without_input(exc: Any) -> str:
@@ -203,7 +224,7 @@ def _message_without_input(exc: Any) -> str:
 
     例: ``1 validation error(s) (input omitted): age [int_parsing] Input should be a valid integer``
     """
-    errors = list(exc.errors())
+    errors = _as_list(exc.errors())
     details = "; ".join(_error_without_input(e) for e in errors)
     return f"{len(errors)} validation error(s) (input omitted): {details}"
 
