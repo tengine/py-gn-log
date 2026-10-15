@@ -64,7 +64,7 @@ logger.error("An error occurred")
 
 `setup_logging()` はルートロガーの level を設定します (`logging.basicConfig(level=...)` と同じ振る舞い)。そのため `apply()` していないモジュールのロガー (`logging.getLogger(__name__)` で取得しただけのもの) からの INFO / DEBUG も出力されます。
 
-ハンドラの level は設定しません。どの level の行を出力するかは、行を出したロガーの実効 level (ロガー自身の level。設定していなければ、親のロガーをたどって最初に見つかった level) で決まります。そのため、`apply()` でロガーの level を `LOG_LEVEL` より低くすると、そのロガーと、その level を引き継ぐ子孫のロガー (ロガー `app` に対する `app.db` など。自身にも、間のロガーにも level を設定していないもの) から、その level の行が出力されます (「ロガーごとに異なる設定を適用」を参照)。
+ハンドラの level は設定しません。どの level の行を出力するかは、行を出したロガーの実効 level (ロガー自身の level。設定していなければ、親のロガーをたどって最初に見つかった level) で決まります。そのため、`apply()` でロガーの level を `LOG_LEVEL` より低くすると、そのロガーと、その level を引き継ぐ子孫のロガー (ロガー `app` に対する `app.db` など。自身にも、間のロガーにも level を設定していないもの) から、その level の行が出力されます。
 
 ルートロガーの level を変更したくない場合は `set_root_level=False` を指定してください。この場合、ルートロガーの level は Python の既定 (WARNING) のままなので、ルートロガーの level を引き継ぐロガー (自身にも、ルートロガーとの間のロガーにも level を設定していないもの。`apply()` していないモジュールのロガーなど) の INFO / DEBUG は出力されません。アプリがルートロガーの level を `LOG_LEVEL` より低くしていた場合は、ルートロガーの level を引き継ぐロガーから、その level の行が出力されます。
 
