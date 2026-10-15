@@ -373,6 +373,7 @@ except ValidationError:
 - FastAPI の例外は、エラーとして任意の値を受け付けます。エラーの列でない値 (`None`・文字列・辞書など) は 1 つのエラーとして扱います。辞書でないエラーと、文字列でない種類・説明は、入力の値を含みうるので、中身を出さずに `<str>` や `<dict>` のように型の名前だけを出力します。
 - 連鎖のほかの例外と、traceback (ソースコードの行を含む) は、標準の traceback と同じ形で出力します。
 - py-gn-log は pydantic と FastAPI を import しません。読み込み済みのモジュールのクラスで、これらの例外を見分けます。
+- 入力の値を除く処理は、Python の `traceback.TracebackException` の非公開の属性に頼っています。その属性が使われなくなった Python の版では、入力の値を出力しないように、入力の検証の例外を含む行の整形を例外 `RuntimeError` で止めます。その行は出力されず、標準エラー出力に `--- Logging error ---` と `RuntimeError` が出ます。標準エラー出力の traceback にも、入力の検証の例外は含めません。
 
 入力の値を除くのは、ログを書くときに渡した例外 (`logger.exception()` や引数 `exc_info` で渡したもの) から作る、JSON 形式のフィールド `stack_trace` と `exc_info` だけです。ログのメッセージとテキスト形式 (`output.text_handler()`) の出力からは除きません。たとえば次の行では、入力の値がフィールド `message` に残ります。
 

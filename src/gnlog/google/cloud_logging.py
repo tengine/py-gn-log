@@ -241,6 +241,8 @@ def _replace_validation_messages(
     そのため、2 つの連鎖を同時にたどれば、対応する箇所が分かる。ほかの例外は、
     標準の traceback と同じ整形 (str の失敗の扱い・提案の付け足し・注記) のまま出る。
     メッセージは非公開の属性 _str にあるので、それを差し替える (Python 3.13 で確かめた)。
+    差し替えた後に str(TracebackException) が差し替えたメッセージを返さなければ (属性が
+    使われなくなった版)、入力の値を出力しないように例外 RuntimeError を出す。
     元の例外は書き換えない。
 
     Args:
@@ -252,8 +254,17 @@ def _replace_validation_messages(
     while stack:
         current_te, current = stack.pop()
         if isinstance(current, types):
+            message = _message_without_input(current)
             # 非公開の属性なので、型の定義 (typeshed) に無い
-            current_te._str = _message_without_input(current)  # type: ignore[attr-defined]
+            current_te._str = message  # type: ignore[attr-defined]
+            if str(current_te) != message:
+                # from None で、処理中の例外 (入力の検証の例外) を連鎖に含めない。含めると、
+                # logging が整形の失敗を標準エラー出力に出すときに、入力の値も出してしまう
+                raise RuntimeError(
+                    "Cannot omit input values from a validation error: "
+                    "traceback.TracebackException no longer uses the attribute _str "
+                    "for the exception message in this Python version."
+                ) from None
         if current_te.__cause__ is not None and current.__cause__ is not None:
             stack.append((current_te.__cause__, current.__cause__))
         if current_te.__context__ is not None and current.__context__ is not None:
@@ -348,6 +359,10 @@ class JsonFormatter(OriginalJsonFormatter):
 
         Args:
             ei: クラス logging.LogRecord の exc_info (例外のクラス・例外・traceback の組)
+
+        Raises:
+            RuntimeError: 入力の検証の例外のメッセージを差し替えられない Python の版の場合
+                (関数 _replace_validation_messages を参照)。入力の値を出力しないために出す
         """
         exc = ei[1]
         types = _validation_error_types()

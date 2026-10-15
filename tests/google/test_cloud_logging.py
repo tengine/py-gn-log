@@ -862,6 +862,69 @@ class TestValidationErrorInput:
             "会員の登録の途中"
         ) in stack_trace
 
+    def test_raises_when_message_cannot_be_replaced(self, monkeypatch):
+        """TracebackException のメッセージを差し替えられない Python の版では、入力の値を出さずに例外を出すこと
+
+        入力の値を除く仕組みは、TracebackException の非公開の属性 _str に頼る。属性が使われなく
+        なった版では、代入がエラーを出さずに効かなくなり、入力の値がそのまま出力されてしまう。
+        """
+        import traceback
+
+        class UnreplaceableTracebackException(traceback.TracebackException):
+            """メッセージを _str 以外から返す TracebackException (属性の名前が変わった版の代わり)"""
+
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self._message_of_other_version = self._str
+
+            def __str__(self) -> str:
+                return self._message_of_other_version
+
+        monkeypatch.setattr(
+            traceback, "TracebackException", UnreplaceableTracebackException
+        )
+        with pytest.raises(RuntimeError, match="TracebackException"):
+            self._format(self._pydantic_error())
+
+    def test_logging_error_does_not_show_input(self, monkeypatch, capsys):
+        """メッセージを差し替えられず整形が失敗したとき、logging が標準エラー出力に出す traceback にも入力の値を出さないこと
+
+        logging は整形の失敗を、例外の連鎖ごと標準エラー出力に出す。処理中の入力の検証の例外が
+        連鎖に入ると、入力の値も出てしまう。Cloud Run では標準エラー出力も Cloud Logging に入る。
+        """
+        import io
+        import traceback
+
+        class UnreplaceableTracebackException(traceback.TracebackException):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self._message_of_other_version = self._str
+
+            def __str__(self) -> str:
+                return self._message_of_other_version
+
+        monkeypatch.setattr(
+            traceback, "TracebackException", UnreplaceableTracebackException
+        )
+        handler = logging.StreamHandler(io.StringIO())
+        handler.setFormatter(JsonFormatter())
+        logger = logging.getLogger("test.cloud_logging.unreplaceable")
+        logger.addHandler(handler)
+        logger.propagate = False
+        validation_error = self._pydantic_error()
+        try:
+            try:
+                raise validation_error
+            except Exception:
+                logger.exception("会員の登録に失敗")
+        finally:
+            logger.removeHandler(handler)
+            logger.propagate = True
+        err = capsys.readouterr().err
+        assert "--- Logging error ---" in err
+        assert "RuntimeError: Cannot omit input values" in err
+        assert self.SECRET not in err
+
     def test_other_exception_is_not_rewritten(self):
         """入力の検証の例外を含まない例外は、これまでどおり logging.Formatter と同じ形で出すこと"""
         try:
