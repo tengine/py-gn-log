@@ -211,7 +211,7 @@ def install(
     # 文脈 (gnlog.context) を全 record に注入する Filter を handler に付ける。
     # ルートロガーに付けると伝播してきた record には適用されないため handler に付ける。
     handler.addFilter(context.ContextFilter())
-    # handler の level は設定しない (NOTSET のまま)。handler でも log_level に絞ると、
+    # handler の level は設定しない。handler でも log_level に絞ると、
     # apply() で level を log_level より低くしたロガーの行まで捨てられる (#47)。
 
     # ルートロガーの既存ハンドラをクリア（重複出力を防ぐため）
