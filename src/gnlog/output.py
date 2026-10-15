@@ -196,19 +196,17 @@ def install(
     Returns:
         組み込んだ handler と apply() を持つ LoggingSetup
     """
-    setup = LoggingSetup(handler, log_level if log_level is not None else 0, verbose)
+    # ログレベル（引数 > 環境変数 > デフォルト）
+    if log_level is None:
+        log_level = level.from_env()
+    setup = LoggingSetup(handler, log_level, verbose)
     setup._diag("gnlog setup starting")
 
     # 文脈 (gnlog.context) を全 record に注入する Filter を handler に付ける。
     # ルートロガーに付けると伝播してきた record には適用されないため handler に付ける。
     handler.addFilter(context.ContextFilter())
-
-    # ログレベル（引数 > 環境変数 > デフォルト）
-    if log_level is None:
-        log_level = level.from_env()
     # handler の level は設定しない (NOTSET のまま)。handler でも log_level に絞ると、
     # apply() で level を log_level より低くしたロガーの行まで捨てられる (#47)。
-    setup.log_level_default = log_level
 
     # ルートロガーの既存ハンドラをクリア（重複出力を防ぐため）
     if logging.root.hasHandlers():
