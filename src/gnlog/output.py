@@ -178,11 +178,13 @@ def install(
     """handler をルートロガーに組み込む
 
     gnlog.context の文脈を注入する Filter を handler に付け、ルートロガーの既存 handler を
-    取り除いてから追加します。handler の level は設定しません。どの level の行を出力するかは、
-    行を出したロガーの実効 level (ロガー自身の level。設定していなければ、親のロガーを
-    たどって最初に見つかった level) で決まります。apply() でロガーの level を設定すると、
-    その level を引き継ぐ子孫のロガー (自身にも、間のロガーにも level を設定していないもの)
-    にも、その level が及びます。
+    取り除いてから追加します。handler の level は設定しません。handler に level を
+    設定していなければ、どの level の行を出力するかは、行を出したロガーの実効 level
+    (ロガー自身の level。設定していなければ、親のロガーをたどって最初に見つかった level)
+    で決まります。apply() でロガーの level を設定すると、その level を引き継ぐ子孫の
+    ロガー (自身にも、間のロガーにも level を設定していないもの) にも、その level が
+    及びます。level を設定した handler を渡した場合は、その level を変えないので、
+    handler の level でも行が絞られます。
 
     Args:
         handler: 組み込む handler

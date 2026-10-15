@@ -494,6 +494,7 @@ https://github.com/tengine/cloud-run-services-fastapi-example/pull/7
 - `extra` や `gnlog.context` でフィールド `time` を渡している場合は、別のキー名に変えてください。渡した値は `JsonFormatter` に上書きされます (「Cloud Run での使用」を参照)。
 - Cloud Logging の文書のとおりなら、ログエントリーの時刻は、Cloud Logging がログを取り込んだ時刻から、ログを書いた時刻 (`LogRecord` の作成時刻) に変わります。
 - `apply(log_level=...)` や `logging.getLogger(...).setLevel(...)` で、ロガーの level を `LOG_LEVEL` より低くしているコード (ライブラリを含む) がある場合は、`LOG_LEVEL` より低い level の行も出力されるようになります。`set_root_level=False` を指定し、ルートロガーの level を `LOG_LEVEL` より低くしている場合も同じです。子孫のロガーが level を引き継ぐ場合を含め、どのロガーの行が出力されるかは「ルートロガーの level について」を参照してください。これまでのようにハンドラでも `LOG_LEVEL` に絞るには、`setup_logging()` の戻り値 `setup` で `setup.handler.setLevel(setup.log_level_default)` を呼んでください。
+- 関数 `gnlog.output.install` に、level を設定した handler を渡している場合は、その level で行が絞られるようになります。これまでは `install()` が handler の level を、引数 `log_level` (省略したときは環境変数 `LOG_LEVEL`) の値で上書きしていました。handler の level で絞りたくない場合は、level を設定せずに渡してください。
 
 ### 0.3.0
 
