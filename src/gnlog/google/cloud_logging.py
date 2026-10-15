@@ -15,6 +15,7 @@ time と severity フィールドを自動的に追加します。
 import logging
 import sys
 import threading
+import traceback
 from collections import Counter
 from collections.abc import Iterator
 from datetime import UTC, datetime
@@ -194,50 +195,37 @@ def _message_without_input(exc: Any) -> str:
     return f"{len(errors)} validation error(s) (input omitted): {details}"
 
 
-def _without_input(
+def _replace_validation_messages(
+    te: traceback.TracebackException,
     exc: BaseException,
     types: tuple[type[BaseException], ...],
-    made: dict[int, BaseException],
-) -> BaseException:
-    """例外の連鎖を、入力の値を除いた代わりの例外で作り直す (元の例外は書き換えない)
+) -> None:
+    """TracebackException の連鎖のうち、入力の検証の例外に当たる箇所のメッセージを差し替える
 
-    代わりの例外は、元の例外と同じモジュール名・クラス名・traceback・注記 (__notes__) を持ち、
-    __cause__・__context__・ExceptionGroup の子も代わりの例外にする。入力の検証の例外の
-    メッセージは関数 _message_without_input で作り、ほかの例外のメッセージは変えない。
+    クラス traceback.TracebackException は、元の例外の __cause__・__context__・
+    ExceptionGroup の子を、同じ形でたどって組み立てる (組み立てない箇所は None になる)。
+    そのため、2 つの連鎖を同時にたどれば、対応する箇所が分かる。ほかの例外は、
+    標準の traceback と同じ整形 (str の失敗の扱い・提案の付け足し・注記) のまま出る。
+    メッセージは非公開の属性 _str にあるので、それを差し替える (Python 3.13 で確かめた)。
+    元の例外は書き換えない。
 
     Args:
-        exc: 作り直す例外
+        te: exc から作った TracebackException
+        exc: 元の例外
         types: 入力の検証の例外のクラス (関数 _validation_error_types の戻り値)
-        made: 作り直した例外の、元の例外の id から代わりの例外への辞書
-            (同じ例外が連鎖に何度出ても、代わりの例外を 1 つにするため)
     """
-    if id(exc) in made:
-        return made[id(exc)]
-    cls = type(exc)
-    namespace = {"__module__": cls.__module__, "__qualname__": cls.__qualname__}
-    stand_in: BaseException
-    if isinstance(exc, BaseExceptionGroup):
-        children = [_without_input(e, types, made) for e in exc.exceptions]
-        stand_in = type(cls.__name__, (ExceptionGroup,), namespace)(
-            exc.message, children
-        )
-    elif isinstance(exc, types):
-        stand_in = type(cls.__name__, (Exception,), namespace)(
-            _message_without_input(exc)
-        )
-    else:
-        stand_in = type(cls.__name__, (Exception,), namespace)(str(exc))
-    made[id(exc)] = stand_in
-    stand_in.__traceback__ = exc.__traceback__
-    if exc.__cause__ is not None:
-        stand_in.__cause__ = _without_input(exc.__cause__, types, made)
-    if exc.__context__ is not None:
-        stand_in.__context__ = _without_input(exc.__context__, types, made)
-    stand_in.__suppress_context__ = exc.__suppress_context__
-    notes = getattr(exc, "__notes__", None)
-    if isinstance(notes, list):
-        stand_in.__notes__ = [str(n) for n in notes]
-    return stand_in
+    stack: list[tuple[traceback.TracebackException, BaseException]] = [(te, exc)]
+    while stack:
+        current_te, current = stack.pop()
+        if isinstance(current, types):
+            # 非公開の属性なので、型の定義 (typeshed) に無い
+            current_te._str = _message_without_input(current)  # type: ignore[attr-defined]
+        if current_te.__cause__ is not None and current.__cause__ is not None:
+            stack.append((current_te.__cause__, current.__cause__))
+        if current_te.__context__ is not None and current.__context__ is not None:
+            stack.append((current_te.__context__, current.__context__))
+        if current_te.exceptions and isinstance(current, BaseExceptionGroup):
+            stack.extend(zip(current_te.exceptions, current.exceptions))
 
 
 class JsonFormatter(OriginalJsonFormatter):
@@ -322,7 +310,7 @@ class JsonFormatter(OriginalJsonFormatter):
 
         例外の連鎖 (__cause__・__context__・ExceptionGroup の子) に、入力の検証の例外
         (pydantic と FastAPI) があれば、その例外のメッセージから入力の値を除いて出す (#49)。
-        連鎖に無ければ、親クラスと同じ形で出す。
+        ほかの例外とその traceback は、親クラスと同じ形で出す。
 
         Args:
             ei: クラス logging.LogRecord の exc_info (例外のクラス・例外・traceback の組)
@@ -335,10 +323,11 @@ class JsonFormatter(OriginalJsonFormatter):
             or not any(isinstance(e, types) for e in _exception_chain(exc))
         ):
             return super().formatException(ei)
-        stand_in = _without_input(exc, types, {})
-        return super().formatException(
-            (type(stand_in), stand_in, stand_in.__traceback__)
-        )
+        # logging.Formatter.formatException が呼ぶ traceback.print_exception と同じ引数で作る
+        te = traceback.TracebackException(type(exc), exc, ei[2], compact=True)
+        _replace_validation_messages(te, exc, types)
+        formatted = "".join(te.format()).removesuffix("\n")
+        return formatted.splitlines() if self.exc_info_as_array else formatted
 
     def add_fields(
         self,

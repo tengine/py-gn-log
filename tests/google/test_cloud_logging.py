@@ -745,6 +745,49 @@ class TestValidationErrorInput:
         assert self.SECRET not in stack_trace
         assert "(input omitted): scores.<key> [int_parsing]" in stack_trace
 
+    def test_other_exception_with_failing_str_in_chain(self):
+        """連鎖に入力の検証の例外があっても、__str__ が例外を出すほかの例外を標準の traceback と同じに出すこと
+
+        整形ごと失敗すると、ログの行がまるごと出力されないため。
+        """
+
+        class Broken(Exception):
+            def __str__(self) -> str:
+                raise RuntimeError("str failed")
+
+        try:
+            try:
+                raise self._pydantic_error()
+            except Exception:
+                raise Broken()
+        except Broken as e:
+            stack_trace = self._format(e)["stack_trace"]
+        assert self.SECRET not in stack_trace
+        assert "(input omitted): age [int_parsing]" in stack_trace
+        assert stack_trace.endswith("Broken: <exception str() failed>")
+
+    def test_other_exception_suggestion_in_chain(self):
+        """連鎖に入力の検証の例外があっても、ほかの例外に traceback が付け足す出力 (提案と注記) を消さないこと"""
+        validation_error = self._pydantic_error()
+
+        def lookup() -> int:
+            valuee = 1  # noqa: F841 (NameError の提案に出す名前)
+            try:
+                raise validation_error
+            except Exception:
+                return value  # type: ignore[name-defined]  # noqa: F821
+
+        try:
+            lookup()
+        except NameError as e:
+            e.add_note("会員の登録の途中")
+            stack_trace = self._format(e)["stack_trace"]
+        assert self.SECRET not in stack_trace
+        assert (
+            "NameError: name 'value' is not defined. Did you mean: 'valuee'?\n"
+            "会員の登録の途中"
+        ) in stack_trace
+
     def test_other_exception_is_not_rewritten(self):
         """入力の検証の例外を含まない例外は、これまでどおり logging.Formatter と同じ形で出すこと"""
         try:
