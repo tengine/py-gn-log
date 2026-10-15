@@ -193,8 +193,8 @@ def install(
             (logging.basicConfig(level=...) と同じ振る舞い)。False ならルートロガーの
             level を変更しない (Python の既定は WARNING なので、ルートロガーの level を
             引き継ぐロガーの INFO / DEBUG は出力されない。アプリがルートロガーの level を
-            log_level より低くしていた場合は、ルートロガーの level を引き継ぐロガーから、
-            その level の行が出力される)
+            log_level より低くしていた場合は、handler に level を設定していなければ、
+            ルートロガーの level を引き継ぐロガーから、その level の行が出力される)
         verbose: True の場合、組み込みと apply() の過程を診断用に標準エラー出力へ出す。
             Cloud Run など標準エラー出力もログ基盤に取り込まれる環境では、構造化されて
             いないエントリとして混じるため、不要なら False を指定する

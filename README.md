@@ -74,6 +74,8 @@ from gnlog.google.cloud_run import setup_logging
 setup_logging(set_root_level=False)
 ```
 
+この節の説明は、ハンドラに level を設定していない場合のものです。`setup_logging()` の戻り値 `setup` で `setup.handler.setLevel(...)` を呼んでハンドラに level を設定すると、ロガーの level にかかわらず、ハンドラの level より低い level の行は出力されません。
+
 ### 環境変数による設定
 
 #### 環境変数の使われ方
