@@ -488,11 +488,32 @@ class TestJsonFormatter:
         assert log_dict["severity"] == "INFO"
         assert "time" in log_dict
 
+    def test_rename_fields_allows_level(self):
+        """引数 rename_fields で、フィールド level の名前を変えられること
+
+        このクラスは level を読まない (severity は levelname から決める。#44) ので、予約しない。
+        """
+        formatter = JsonFormatter(rename_fields={"level": "app_level"})
+        record = logging.LogRecord(
+            name="app",
+            level=logging.ERROR,
+            pathname="test.py",
+            lineno=1,
+            msg="boom",
+            args=(),
+            exc_info=None,
+        )
+        record.level = "debug"
+        log_dict = json.loads(formatter.format(record))
+        assert log_dict["app_level"] == "debug"
+        assert "level" not in log_dict
+        assert log_dict["severity"] == "ERROR"
+        JsonFormatter(rename_fields={"user_level": "level"})
+
     @pytest.mark.parametrize(
         "key",
         [
             "time",
-            "level",
             "severity",
             "logging.googleapis.com/labels",
             "exc_info",

@@ -49,12 +49,11 @@ _RECORD_FIELDS: tuple[str, ...] = (*_PARSED_FIELDS, "stack_info")
 
 # クラス JsonFormatter が、親クラスのメソッド add_fields の後で読み書きするキー。
 # 引数 rename_fields の変換前・変換後に使うと、値がフォーマッターに上書きされるか、
-# フォーマッターの処理 (フィールド severity の決定、フィールド stack_trace への載せ替え、
-# 引数 error_event のフィールド) が働かなくなるので受け付けない
+# フォーマッターの処理 (フィールド stack_trace への載せ替え、引数 error_event の
+# フィールド) が働かなくなるので受け付けない
 _RENAME_RESERVED_KEYS: frozenset[str] = frozenset(
     {
         "time",
-        "level",
         "severity",
         CLOUD_LOGGING_LABELS_KEY,
         "exc_info",
@@ -74,8 +73,8 @@ def validate_rename_fields(rename_fields: dict[str, str]) -> None:
     働かなくなるか、名前が重なった片方の値が出力から失われるので受け付けない。
 
     - 変換前・変換後のどちらかに、クラス JsonFormatter が読み書きするキー (``time``・
-      ``level``・``severity``・``logging.googleapis.com/labels``・``exc_info``・
-      ``stack_trace``・``event``・``error_type``・``operation``・``fingerprint``) がある
+      ``severity``・``logging.googleapis.com/labels``・``exc_info``・``stack_trace``・
+      ``event``・``error_type``・``operation``・``fingerprint``) がある
     - 複数の変換前の名前を、同じ変換後の名前に対応させている
     - 変換後の名前が、名前を変えていないフィールド ``name``・``message``・``stack_info``
       と同じ (``{"name": "message", "message": "msg"}`` のように、そのフィールドの名前も

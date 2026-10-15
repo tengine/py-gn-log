@@ -469,7 +469,6 @@ Cloud Logging は、構造化ログの特別なフィールドを名前で見分
 | キー | 使えない理由 |
 |---|---|
 | `time`・`severity`・`logging.googleapis.com/labels` | `JsonFormatter` が後から値を入れる (`logging.googleapis.com/labels` には値を足す)。`time` の扱いは「Cloud Run での使用」を参照 |
-| `level` | `JsonFormatter` が `severity` を決めるときに読む |
 | `exc_info`・`stack_trace` | severity ERROR 以上のログで、`JsonFormatter` が `exc_info` (python-json-logger がトレースバックを入れるフィールド) を `stack_trace` に載せ替える |
 | `event`・`error_type`・`operation`・`fingerprint` | 引数 `error_event` を指定したときに `JsonFormatter` が読み書きする (「ERROR 以上のログに分類と dedup 用の fingerprint を付ける」を参照)。`error_event` を指定しない場合も使えない |
 
