@@ -350,7 +350,7 @@ build_fingerprint("worker|orders", "create", "validation", "boom")
 
 ### 入力の検証の例外から入力の値を除く
 
-pydantic v2 の `ValidationError` と、FastAPI 0.100.0 以降の `RequestValidationError`・`ResponseValidationError` は、メッセージに検証に失敗した入力の値 (リクエストやレスポンスの本文。個人情報やトークンを含みうる) が入ります。JSON 形式では、例外の連鎖 (`__cause__`・`__context__`・`ExceptionGroup` の子) にこれらの例外があれば、そのメッセージから入力の値を除いて、フィールド `stack_trace` (severity WARNING 以下では `exc_info`) に出力します。
+pydantic v2 の `ValidationError` と、FastAPI 0.100.0 以降の `RequestValidationError`・`ResponseValidationError` は、メッセージに検証に失敗した入力の値 (リクエストやレスポンスの本文。個人情報やトークンを含みうる) が入ります。JSON 形式では、例外の連鎖 (`__cause__`・`__context__`・`ExceptionGroup` の子) にこれらの例外があれば、そのメッセージから入力の値を除いて、フィールド `stack_trace` (severity WARNING 以下では `exc_info`。どちらに入るかは「出力するフィールドの名前を変える」の表の `exc_info`・`stack_trace` の行を参照) に出力します。
 
 ```python
 import logging
