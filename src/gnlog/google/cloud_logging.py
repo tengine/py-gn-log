@@ -409,13 +409,11 @@ class JsonFormatter(OriginalJsonFormatter):
             "%Y-%m-%dT%H:%M:%S.%fZ"
         )
 
-        # severity フィールドを追加（Cloud Logging でログレベルとして認識される）
-        if log_data.get("level"):
-            # log_data に level フィールドが存在する場合は、大文字に変換して severity として流用
-            log_data["severity"] = log_data["level"].upper()
-        else:
-            # level フィールドがない場合は LogRecord の levelname を使用
-            log_data["severity"] = record.levelname
+        # severity フィールドを追加（Cloud Logging でログレベルとして認識される）。
+        # ログを書いたときのレベル (LogRecord の levelname) から決める。extra や gnlog.context で
+        # 渡したフィールド level は、呼び出し側のフィールドとしてそのまま出力し、severity には
+        # 使わない。使うと、ERROR のログが別の重大度として扱われる (#44)
+        log_data["severity"] = record.levelname
 
         # Cloud Logging の labels にスレッド情報を追加
         current_thread = threading.current_thread()
