@@ -605,3 +605,389 @@ class TestJsonFormatter:
         log_dict = json.loads(formatter.format(record))
         assert log_dict["stack_trace"] == "custom stack trace"
         assert "Traceback" in log_dict["exc_info"]
+
+
+class TestValidationErrorInput:
+    """入力の検証の例外のメッセージから、入力の値を除いて出力することのテスト (#49)
+
+    pydantic と FastAPI の入力の検証の例外は、メッセージに入力の値 (リクエストや
+    レスポンスの本文。個人情報やトークンを含みうる) が入る。そのまま出力すると、
+    ログに入力の値が残る。
+    """
+
+    SECRET = "token-abc123"
+    EMAIL = "taro@example.com"
+
+    @staticmethod
+    def _format(exc: BaseException, level: int = logging.ERROR) -> dict:
+        record = logging.LogRecord(
+            name="app",
+            level=level,
+            pathname="test.py",
+            lineno=10,
+            msg="会員の登録に失敗",
+            args=(),
+            exc_info=(type(exc), exc, exc.__traceback__),
+        )
+        return json.loads(JsonFormatter().format(record))
+
+    def _pydantic_error(self) -> Exception:
+        import pydantic
+
+        class Member(pydantic.BaseModel):
+            email: str
+            age: int
+
+        try:
+            Member.model_validate({"email": self.EMAIL, "age": self.SECRET})
+        except pydantic.ValidationError as e:
+            return e
+        raise AssertionError("ValidationError が送出されなかった")
+
+    def _fastapi_error(self, name: str) -> Exception:
+        from fastapi import exceptions
+
+        error_class = getattr(exceptions, name)
+        errors = [
+            {
+                "type": "int_parsing",
+                "loc": ("body", "age"),
+                "msg": "Input should be a valid integer",
+                "input": self.SECRET,
+            }
+        ]
+        try:
+            raise error_class(errors, body={"email": self.EMAIL, "age": self.SECRET})
+        except exceptions.ValidationException as e:
+            return e
+        raise AssertionError(f"{name} が送出されなかった")
+
+    def test_pydantic_validation_error_omits_input(self):
+        """pydantic の ValidationError は、入力の値を除き、場所と種類だけをフィールド stack_trace に出すこと"""
+        stack_trace = self._format(self._pydantic_error())["stack_trace"]
+        assert self.SECRET not in stack_trace
+        assert self.EMAIL not in stack_trace
+        assert "Traceback (most recent call last)" in stack_trace
+        assert stack_trace.endswith(
+            "pydantic_core._pydantic_core.ValidationError: "
+            "1 validation error(s) (input omitted): age [int_parsing]"
+        )
+
+    def test_pydantic_message_with_input_is_not_output(self):
+        """pydantic の組み込みの説明 (msg) も出さないこと
+
+        説明には、タグで型を選ぶ union (discriminated union) のタグの値のように、入力の値を
+        埋め込むものがある。
+        """
+        from typing import Literal
+
+        import pydantic
+
+        class Cat(pydantic.BaseModel):
+            kind: Literal["cat"]
+
+        class Dog(pydantic.BaseModel):
+            kind: Literal["dog"]
+
+        class Pet(pydantic.BaseModel):
+            pet: Cat | Dog = pydantic.Field(discriminator="kind")
+
+        try:
+            Pet.model_validate({"pet": {"kind": self.SECRET}})
+        except pydantic.ValidationError as e:
+            stack_trace = self._format(e)["stack_trace"]
+        assert self.SECRET not in stack_trace
+        assert stack_trace.endswith(
+            "1 validation error(s) (input omitted): pet [union_tag_invalid]"
+        )
+
+    def test_warning_exc_info_omits_input(self):
+        """WARNING 以下で出すフィールド exc_info からも、入力の値を除くこと"""
+        log_dict = self._format(self._pydantic_error(), level=logging.WARNING)
+        assert "stack_trace" not in log_dict
+        assert self.SECRET not in log_dict["exc_info"]
+        assert "(input omitted): age [int_parsing]" in log_dict["exc_info"]
+
+    @pytest.mark.parametrize(
+        "name", ["RequestValidationError", "ResponseValidationError"]
+    )
+    def test_fastapi_validation_error_omits_input(self, name):
+        """FastAPI の入力の検証の例外も、入力の値を除いて出すこと"""
+        stack_trace = self._format(self._fastapi_error(name))["stack_trace"]
+        assert self.SECRET not in stack_trace
+        assert self.EMAIL not in stack_trace
+        assert stack_trace.endswith(
+            f"fastapi.exceptions.{name}: "
+            "1 validation error(s) (input omitted): body.age [int_parsing]"
+        )
+
+    def test_fastapi_errors_that_are_not_dicts_omit_input(self):
+        """FastAPI の例外の errors() の要素が辞書でなくても、整形を失敗させずに、中身を出さないこと
+
+        FastAPI の ValidationException は、errors に任意の要素の列を受け付ける。
+        辞書でない要素は入力の値を含みうるので、型の名前だけを出す。
+        """
+        from fastapi.exceptions import RequestValidationError
+
+        try:
+            raise RequestValidationError([f"age is invalid: {self.SECRET}"])
+        except RequestValidationError as e:
+            stack_trace = self._format(e)["stack_trace"]
+        assert self.SECRET not in stack_trace
+        assert stack_trace.endswith(
+            "fastapi.exceptions.RequestValidationError: "
+            "1 validation error(s) (input omitted): <str>"
+        )
+
+    def test_fastapi_error_loc_that_is_a_str(self):
+        """errors() の要素の場所 (loc) が文字列なら、1 文字ずつではなく 1 つの要素として出すこと"""
+        from fastapi.exceptions import RequestValidationError
+
+        try:
+            raise RequestValidationError(
+                [{"type": "missing", "loc": "body", "msg": "Field required"}]
+            )
+        except RequestValidationError as e:
+            stack_trace = self._format(e)["stack_trace"]
+        assert stack_trace.endswith(
+            "1 validation error(s) (input omitted): body [missing]"
+        )
+
+    @pytest.mark.parametrize(
+        ("errors", "expected"),
+        [
+            (None, "<NoneType>"),
+            (f"age is invalid: {SECRET}", "<str>"),
+            ({"loc": ("age",), "type": "t", "msg": "m"}, "age [t]"),
+        ],
+    )
+    def test_fastapi_errors_that_are_not_a_sequence(self, errors, expected):
+        """FastAPI の例外の errors() が要素の列でなければ、1 つの要素として扱うこと
+
+        反復できない値で整形を失敗させず、文字列や辞書を 1 文字ずつ・キーごとに数えないため。
+        辞書でない値は、要素と同じく中身を出さない。
+        """
+        from fastapi.exceptions import RequestValidationError
+
+        try:
+            raise RequestValidationError(errors)
+        except RequestValidationError as e:
+            stack_trace = self._format(e)["stack_trace"]
+        assert self.SECRET not in stack_trace
+        assert stack_trace.endswith(
+            f"1 validation error(s) (input omitted): {expected}"
+        )
+
+    @pytest.mark.parametrize("kind", [None, f"bad type: {SECRET}"])
+    def test_fastapi_error_values_that_are_not_identifiers(self, kind):
+        """errors() の要素の種類 (type) が識別子の形の文字列でなければ型の名前だけを、場所 (loc) が bytes なら <key> を出すこと
+
+        アプリが作る FastAPI の例外では、種類にも任意の値が入りうる。bytes の場所を 1 バイトずつ
+        数字で出すと、中身が読めてしまう。
+        """
+        from fastapi.exceptions import RequestValidationError
+
+        errors = [{"loc": self.SECRET.encode(), "type": kind, "msg": self.SECRET}]
+        try:
+            raise RequestValidationError(errors)
+        except RequestValidationError as e:
+            stack_trace = self._format(e)["stack_trace"]
+        assert self.SECRET not in stack_trace
+        expected = "<NoneType>" if kind is None else "<str>"
+        assert stack_trace.endswith(
+            f"1 validation error(s) (input omitted): <key> [{expected}]"
+        )
+
+    @pytest.mark.parametrize("link", ["cause", "context"])
+    def test_validation_error_in_chain_omits_input(self, link):
+        """例外の連鎖 (__cause__ か __context__) の中の入力の検証の例外も、入力の値を除いて出すこと
+
+        ほかの例外のメッセージは書き換えない。
+        """
+        validation_error = self._pydantic_error()
+        try:
+            if link == "cause":
+                raise RuntimeError("会員の登録に失敗") from validation_error
+            try:
+                raise validation_error
+            except Exception:
+                raise RuntimeError("会員の登録に失敗")
+        except RuntimeError as e:
+            stack_trace = self._format(e)["stack_trace"]
+        assert self.SECRET not in stack_trace
+        assert "(input omitted): age [int_parsing]" in stack_trace
+        assert "RuntimeError: 会員の登録に失敗" in stack_trace
+
+    def test_validation_error_in_exception_group_omits_input(self):
+        """ExceptionGroup の子の入力の検証の例外も、入力の値を除いて出すこと
+
+        ExceptionGroup のメッセージと、ほかの子のメッセージは書き換えない。
+        """
+        try:
+            raise ExceptionGroup(
+                "複数の処理が失敗", [ValueError("別の失敗"), self._pydantic_error()]
+            )
+        except ExceptionGroup as e:
+            stack_trace = self._format(e)["stack_trace"]
+        assert self.SECRET not in stack_trace
+        assert "(input omitted): age [int_parsing]" in stack_trace
+        assert "ExceptionGroup: 複数の処理が失敗" in stack_trace
+        assert "ValueError: 別の失敗" in stack_trace
+
+    def test_loc_key_from_input_is_omitted(self):
+        """場所 (loc) に入った辞書のキーのうち、識別子の形でないもの (入力の値でありうる) は出さないこと"""
+        import pydantic
+
+        class Scores(pydantic.BaseModel):
+            scores: dict[str, int]
+
+        try:
+            Scores.model_validate({"scores": {self.EMAIL: self.SECRET}})
+        except pydantic.ValidationError as e:
+            stack_trace = self._format(e)["stack_trace"]
+        assert self.EMAIL not in stack_trace
+        assert self.SECRET not in stack_trace
+        assert "(input omitted): scores.<key> [int_parsing]" in stack_trace
+
+    def test_other_exception_with_failing_str_in_chain(self):
+        """連鎖に入力の検証の例外があっても、__str__ が例外を出すほかの例外を標準の traceback と同じに出すこと
+
+        整形ごと失敗すると、ログの行がまるごと出力されないため。
+        """
+
+        class Broken(Exception):
+            def __str__(self) -> str:
+                raise RuntimeError("str failed")
+
+        try:
+            try:
+                raise self._pydantic_error()
+            except Exception:
+                raise Broken()
+        except Broken as e:
+            stack_trace = self._format(e)["stack_trace"]
+        assert self.SECRET not in stack_trace
+        assert "(input omitted): age [int_parsing]" in stack_trace
+        assert stack_trace.endswith("Broken: <exception str() failed>")
+
+    def test_other_exception_suggestion_in_chain(self):
+        """連鎖に入力の検証の例外があっても、ほかの例外に traceback が付け足す出力 (提案と注記) を消さないこと"""
+        validation_error = self._pydantic_error()
+
+        def lookup() -> int:
+            valuee = 1  # noqa: F841 (NameError の提案に出す名前)
+            try:
+                raise validation_error
+            except Exception:
+                return value  # type: ignore[name-defined]  # noqa: F821
+
+        try:
+            lookup()
+        except NameError as e:
+            e.add_note("会員の登録の途中")
+            stack_trace = self._format(e)["stack_trace"]
+        assert self.SECRET not in stack_trace
+        assert (
+            "NameError: name 'value' is not defined. Did you mean: 'valuee'?\n"
+            "会員の登録の途中"
+        ) in stack_trace
+
+    def test_raises_when_message_cannot_be_replaced(self, monkeypatch):
+        """TracebackException のメッセージを差し替えられない Python の版では、入力の値を出さずに例外を出すこと
+
+        入力の値を除く仕組みは、TracebackException の非公開の属性 _str に頼る。属性が使われなく
+        なった版では、代入がエラーを出さずに効かなくなり、入力の値がそのまま出力されてしまう。
+        """
+        import traceback
+
+        class UnreplaceableTracebackException(traceback.TracebackException):
+            """メッセージを _str 以外から返す TracebackException (属性の名前が変わった版の代わり)"""
+
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self._message_of_other_version = self._str
+
+            def __str__(self) -> str:
+                return self._message_of_other_version
+
+        monkeypatch.setattr(
+            traceback, "TracebackException", UnreplaceableTracebackException
+        )
+        with pytest.raises(RuntimeError, match="TracebackException"):
+            self._format(self._pydantic_error())
+
+    def test_logging_error_does_not_show_input(self, monkeypatch, capsys):
+        """メッセージを差し替えられず整形が失敗したとき、logging が標準エラー出力に出す traceback にも入力の値を出さないこと
+
+        logging は整形の失敗を、例外の連鎖ごと標準エラー出力に出す。処理中の入力の検証の例外が
+        連鎖に入ると、入力の値も出てしまう。Cloud Run では標準エラー出力も Cloud Logging に入る。
+        """
+        import io
+        import traceback
+
+        class UnreplaceableTracebackException(traceback.TracebackException):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self._message_of_other_version = self._str
+
+            def __str__(self) -> str:
+                return self._message_of_other_version
+
+        monkeypatch.setattr(
+            traceback, "TracebackException", UnreplaceableTracebackException
+        )
+        handler = logging.StreamHandler(io.StringIO())
+        handler.setFormatter(JsonFormatter())
+        logger = logging.getLogger("test.cloud_logging.unreplaceable")
+        logger.addHandler(handler)
+        logger.propagate = False
+        validation_error = self._pydantic_error()
+        try:
+            try:
+                raise validation_error
+            except Exception:
+                logger.exception("会員の登録に失敗")
+        finally:
+            logger.removeHandler(handler)
+            logger.propagate = True
+        err = capsys.readouterr().err
+        assert "--- Logging error ---" in err
+        assert "RuntimeError: Cannot omit input values" in err
+        assert self.SECRET not in err
+
+    def test_other_exception_is_not_rewritten(self):
+        """入力の検証の例外を含まない例外は、これまでどおり logging.Formatter と同じ形で出すこと"""
+        try:
+            raise ValueError(f"boom {self.SECRET}")
+        except ValueError as e:
+            exc_info = (type(e), e, e.__traceback__)
+            stack_trace = self._format(e)["stack_trace"]
+        assert stack_trace == logging.Formatter().formatException(exc_info)
+
+    def test_original_exception_is_not_modified(self):
+        """出力のために、元の例外のメッセージを書き換えないこと"""
+        error = self._pydantic_error()
+        self._format(error)
+        assert self.SECRET in str(error)
+
+    def test_does_not_import_pydantic_or_fastapi(self):
+        """クラス JsonFormatter は、例外を出力するときも pydantic と FastAPI を読み込まないこと"""
+        import subprocess
+        import sys
+
+        code = (
+            "import json, logging, sys\n"
+            "from gnlog.google.cloud_logging import JsonFormatter\n"
+            "try:\n"
+            "    raise ValueError('boom')\n"
+            "except ValueError:\n"
+            "    ei = sys.exc_info()\n"
+            "record = logging.LogRecord('app', logging.ERROR, 'x.py', 1, 'm', (), ei)\n"
+            "json.loads(JsonFormatter().format(record))\n"
+            "print(' '.join(sorted(m for m in sys.modules "
+            "if m.split('.')[0] in ('pydantic', 'pydantic_core', 'fastapi'))))\n"
+        )
+        out = subprocess.run(
+            [sys.executable, "-c", code], check=True, capture_output=True, text=True
+        ).stdout
+        assert out.split() == []

@@ -13,8 +13,11 @@ time と severity フィールドを自動的に追加します。
 """
 
 import logging
+import sys
 import threading
+import traceback
 from collections import Counter
+from collections.abc import Iterable, Iterator, Mapping
 from datetime import UTC, datetime
 from typing import Any
 
@@ -125,6 +128,152 @@ def validate_rename_fields(rename_fields: dict[str, str]) -> None:
         )
 
 
+def _validation_error_types() -> tuple[type[BaseException], ...]:
+    """入力の検証の例外のクラスを、読み込み済みのモジュールから取り出す
+
+    pydantic と FastAPI の入力の検証の例外は、メッセージに入力の値 (リクエストやレスポンスの
+    本文) が入る。このモジュールは pydantic と FastAPI を import しない。例外が作られていれば、
+    そのクラスのモジュールは読み込み済みなので、sys.modules から取り出せば足りる。
+
+    Returns:
+        クラス pydantic_core.ValidationError (pydantic.ValidationError と同じクラス) と、
+        クラス fastapi.exceptions.ValidationException (RequestValidationError と
+        ResponseValidationError の親クラス) のうち、読み込み済みのもの。
+        ValidationException の無い FastAPI (pydantic v1 を使う版) は対象にしない
+    """
+    types: list[type[BaseException]] = []
+    pydantic_core = sys.modules.get("pydantic_core")
+    if pydantic_core is not None:
+        types.append(pydantic_core.ValidationError)
+    fastapi_exceptions = sys.modules.get("fastapi.exceptions")
+    validation_exception = getattr(fastapi_exceptions, "ValidationException", None)
+    if validation_exception is not None:
+        types.append(validation_exception)
+    return tuple(types)
+
+
+def _exception_chain(exc: BaseException) -> Iterator[BaseException]:
+    """例外と、それにつながる例外 (__cause__・__context__・ExceptionGroup の子) を順にたどる"""
+    seen: set[int] = set()
+    stack = [exc]
+    while stack:
+        current = stack.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        yield current
+        stack.extend(
+            e for e in (current.__cause__, current.__context__) if e is not None
+        )
+        if isinstance(current, BaseExceptionGroup):
+            stack.extend(current.exceptions)
+
+
+def _loc_part_without_input(part: Any) -> str:
+    """入力の検証の例外の場所 (loc) の要素のうち、番号と識別子の形の文字列だけを残す
+
+    辞書の値を検証した例外では、辞書のキー (入力の値) が場所に入るため。
+    """
+    if isinstance(part, int) or (
+        isinstance(part, str) and part.isascii() and part.isidentifier()
+    ):
+        return str(part)
+    return "<key>"
+
+
+def _as_list(value: Any) -> list[Any]:
+    """入力の検証の例外の errors() の戻り値か、その要素の場所 (loc) を、要素の列にする
+
+    FastAPI の ValidationException は errors に任意の値を受け付ける。文字列・bytes・辞書は
+    反復すると 1 文字・1 バイト・1 キーずつになるので、反復できない値と同じく 1 つの要素として扱う。
+    """
+    if isinstance(value, (str, bytes, bytearray, Mapping)) or not isinstance(
+        value, Iterable
+    ):
+        return [value]
+    return list(value)
+
+
+def _type_without_input(value: Any) -> str:
+    """入力の検証の例外の errors() の要素の種類 (type) を書く
+
+    pydantic の種類はすべて識別子の形の名前 (int_parsing など) だが、アプリが作る FastAPI の
+    例外には任意の値が入りうる。識別子の形の文字列でなければ、入力の値を含みうるので
+    中身を出さず、型の名前だけを ``<str>`` のように書く (無いときの None も ``<NoneType>`` になる)。
+    """
+    if isinstance(value, str) and value.isascii() and value.isidentifier():
+        return value
+    return f"<{type(value).__name__}>"
+
+
+def _error_without_input(error: Any) -> str:
+    """入力の検証の例外の errors() の 1 つの要素を、場所 (loc) と種類 (type) だけで書く
+
+    説明 (msg) は書かない。pydantic の組み込みの説明にも、タグで型を選ぶ union のタグの値の
+    ように、入力の値を埋め込むものがあるため。
+    pydantic の要素は辞書だが、FastAPI の ValidationException は任意の要素の列を受け付ける。
+    辞書でない要素は入力の値を含みうるので、中身を出さず、型の名前だけを ``<str>`` のように書く。
+    """
+    if not isinstance(error, Mapping):
+        return f"<{type(error).__name__}>"
+    loc = ".".join(_loc_part_without_input(p) for p in _as_list(error.get("loc", ())))
+    return f"{loc} [{_type_without_input(error.get('type'))}]"
+
+
+def _message_without_input(exc: Any) -> str:
+    """入力の検証の例外のメッセージを、errors() の要素ごとに関数 _error_without_input で書いて作る
+
+    例: ``1 validation error(s) (input omitted): age [int_parsing]``
+    """
+    errors = _as_list(exc.errors())
+    details = "; ".join(_error_without_input(e) for e in errors)
+    return f"{len(errors)} validation error(s) (input omitted): {details}"
+
+
+def _replace_validation_messages(
+    te: traceback.TracebackException,
+    exc: BaseException,
+    types: tuple[type[BaseException], ...],
+) -> None:
+    """TracebackException の連鎖のうち、入力の検証の例外に当たる箇所のメッセージを差し替える
+
+    クラス traceback.TracebackException は、元の例外の __cause__・__context__・
+    ExceptionGroup の子を、同じ形でたどって組み立てる (組み立てない箇所は None になる)。
+    そのため、2 つの連鎖を同時にたどれば、対応する箇所が分かる。ほかの例外は、
+    標準の traceback と同じ整形 (str の失敗の扱い・提案の付け足し・注記) のまま出る。
+    メッセージは非公開の属性 _str にあるので、それを差し替える (Python 3.13 で確かめた)。
+    差し替えた後に str(TracebackException) が差し替えたメッセージを返さなければ (属性が
+    使われなくなった版)、入力の値を出力しないように例外 RuntimeError を出す。
+    元の例外は書き換えない。
+
+    Args:
+        te: exc から作った TracebackException
+        exc: 元の例外
+        types: 入力の検証の例外のクラス (関数 _validation_error_types の戻り値)
+    """
+    stack: list[tuple[traceback.TracebackException, BaseException]] = [(te, exc)]
+    while stack:
+        current_te, current = stack.pop()
+        if isinstance(current, types):
+            message = _message_without_input(current)
+            # 非公開の属性なので、型の定義 (typeshed) に無い
+            current_te._str = message  # type: ignore[attr-defined]
+            if str(current_te) != message:
+                # from None で、処理中の例外 (入力の検証の例外) を連鎖に含めない。含めると、
+                # logging が整形の失敗を標準エラー出力に出すときに、入力の値も出してしまう
+                raise RuntimeError(
+                    "Cannot omit input values from a validation error: "
+                    "traceback.TracebackException no longer uses the attribute _str "
+                    "for the exception message in this Python version."
+                ) from None
+        if current_te.__cause__ is not None and current.__cause__ is not None:
+            stack.append((current_te.__cause__, current.__cause__))
+        if current_te.__context__ is not None and current.__context__ is not None:
+            stack.append((current_te.__context__, current.__context__))
+        if current_te.exceptions and isinstance(current, BaseExceptionGroup):
+            stack.extend(zip(current_te.exceptions, current.exceptions))
+
+
 class JsonFormatter(OriginalJsonFormatter):
     """Google Cloud Logging 向けの JSON フォーマッター
 
@@ -138,6 +287,10 @@ class JsonFormatter(OriginalJsonFormatter):
     Cloud Logging の文書では、これらは ``time`` より先に読まれます。
 
     フィールド ``stack_info`` は、``stack_info=True`` を指定してログを書いた行だけに出力します。
+
+    例外の連鎖に入力の検証の例外 (pydantic の ``ValidationError``、FastAPI の
+    ``RequestValidationError`` と ``ResponseValidationError``) があれば、その例外の
+    メッセージから入力の値を除き、場所と種類だけを出力します (メソッド formatException)。
     """
 
     def __init__(
@@ -194,6 +347,37 @@ class JsonFormatter(OriginalJsonFormatter):
             指定した行にだけ python-json-logger が出力するのに任せる
         """
         return list(_PARSED_FIELDS)
+
+    # 戻り値の型は親クラス (python-json-logger) に合わせる。python-json-logger は、引数
+    # exc_info_as_array を指定すると行のリストを返すので、logging.Formatter の str と
+    # 合わない (python-json-logger 自身も type: ignore を付けている)
+    def formatException(self, ei: Any) -> str | list[str]:  # type: ignore[override]
+        """例外の情報を整形する (フィールド exc_info と stack_trace の値)
+
+        例外の連鎖 (__cause__・__context__・ExceptionGroup の子) に、入力の検証の例外
+        (pydantic と FastAPI) があれば、その例外のメッセージから入力の値を除いて出す (#49)。
+        ほかの例外とその traceback は、親クラスと同じ形で出す。
+
+        Args:
+            ei: クラス logging.LogRecord の exc_info (例外のクラス・例外・traceback の組)
+
+        Raises:
+            RuntimeError: 入力の検証の例外のメッセージを差し替えられない Python の版の場合
+                (関数 _replace_validation_messages を参照)。入力の値を出力しないために出す
+        """
+        exc = ei[1]
+        types = _validation_error_types()
+        if (
+            exc is None
+            or not types
+            or not any(isinstance(e, types) for e in _exception_chain(exc))
+        ):
+            return super().formatException(ei)
+        # logging.Formatter.formatException が呼ぶ traceback.print_exception と同じ引数で作る
+        te = traceback.TracebackException(type(exc), exc, ei[2], compact=True)
+        _replace_validation_messages(te, exc, types)
+        formatted = "".join(te.format()).removesuffix("\n")
+        return formatted.splitlines() if self.exc_info_as_array else formatted
 
     def add_fields(
         self,
