@@ -181,6 +181,20 @@ Cloud Run 上かどうかの判定は `gnlog.google.cloud_run.is_cloud_run()` �
 
 フィールド `stack_info` (ログを書いた箇所までの呼び出し履歴) は、`logger.info(..., stack_info=True)` のように `stack_info=True` を指定してログを書いた行だけに出力します。
 
+`severity` は、ログを書いたときのレベル (`logger.error()` なら `ERROR`) です。引数 `extra` や `gnlog.context` で渡したフィールド `level` はそのまま出力し、`severity` には使いません。`extra` などで渡したフィールド `severity` は、この値で上書きされます。
+
+Python の logging にレベルが無い Cloud Logging の重大度 (`NOTICE`・`ALERT`・`EMERGENCY`) を出すには、関数 `logging.addLevelName` でその名前を付けたレベルを作り、`logger.log()` で使います。ERROR (40) 以上のレベルは、ERROR と同じく `stack_trace` と `error_event` のフィールドの対象になります。
+
+```python
+import logging
+
+logging.addLevelName(25, "NOTICE")  # INFO (20) と WARNING (30) の間
+logging.addLevelName(60, "ALERT")  # CRITICAL (50) より上
+logging.addLevelName(70, "EMERGENCY")
+
+logging.getLogger(__name__).log(60, "在庫の同期が止まった")  # severity は ALERT
+```
+
 ### リクエスト / タスク単位の文脈を全ログ行に付ける
 
 1 つのリクエストや 1 つのタスクの処理中に出るログ行を、あとから 1 つの ID で串刺しにしたい場面 (エラー応答に載せた ID から Cloud Logging を引く、複数サービスにまたがる処理を追う等) のために、`gnlog.context` を用意しています。
@@ -467,7 +481,6 @@ Cloud Logging は、構造化ログの特別なフィールドを名前で見分
 | キー | 使えない理由 |
 |---|---|
 | `time`・`severity`・`logging.googleapis.com/labels` | `JsonFormatter` が後から値を入れる (`logging.googleapis.com/labels` には値を足す)。`time` の扱いは「Cloud Run での使用」を参照 |
-| `level` | `JsonFormatter` が `severity` を決めるときに読む |
 | `exc_info`・`stack_trace` | severity ERROR 以上のログで、`JsonFormatter` が `exc_info` (python-json-logger がトレースバックを入れるフィールド) を `stack_trace` に載せ替える |
 | `event`・`error_type`・`operation`・`fingerprint` | 引数 `error_event` を指定したときに `JsonFormatter` が読み書きする (「ERROR 以上のログに分類と dedup 用の fingerprint を付ける」を参照)。`error_event` を指定しない場合も使えない |
 
@@ -525,6 +538,7 @@ https://github.com/tengine/cloud-run-services-fastapi-example/pull/7
 - ハンドラの level を設定しないようにした (#47)。`apply()` でロガーの level を `LOG_LEVEL` より低くすると、その level の行も出力される。どのロガーの行が出力されるかは「ルートロガーの level について」を参照
 - フィールド `stack_info` を、`stack_info=True` を指定した行だけに出力するようにした (#48)。これまでは、ほかの行にも値が `null` の `stack_info` を出力していた
 - 入力の検証の例外 (pydantic の `ValidationError`、FastAPI の `RequestValidationError`・`ResponseValidationError`) のメッセージから、入力の値を除いて出力するようにした (#49)。扱いは「入力の検証の例外から入力の値を除く」を参照
+- `extra` や `gnlog.context` で渡したフィールド `level` で、`severity` を変えなくなった (#44)。扱いは「Cloud Run での使用」を参照
 
 #### 0.3.0 からの移行
 
@@ -535,6 +549,7 @@ https://github.com/tengine/cloud-run-services-fastapi-example/pull/7
 - 関数 `gnlog.output.install` に、level を設定した handler を渡している場合は、その level で行が絞られるようになります。これまでは `install()` が handler の level を、引数 `log_level` (省略したときは環境変数 `LOG_LEVEL`) の値で上書きしていました。handler の level で絞りたくない場合は、level を設定せずに渡してください。
 - `stack_info=True` を指定していない行には、フィールド `stack_info` が無くなります。出力にキー `stack_info` が必ずあることを前提にしている処理は、キーが無い行も扱えるように直してください。
 - 入力の検証の例外を記録した行では、`stack_trace` (severity WARNING 以下では `exc_info`) の、その例外のメッセージの形が変わります。ログのクエリやログベースの指標で、pydantic や FastAPI のメッセージの文字列を条件にしている場合は、新しい形 (「入力の検証の例外から入力の値を除く」を参照) に合わせて直してください。
+- `extra` や `gnlog.context` でフィールド `level` を渡して `severity` を変えていた場合、その行の `severity` は、ログを書いたときのレベルになります。重大度を変えるには、呼び出すメソッド (`logger.warning()` など) を変えてください。Python の logging にレベルが無い重大度 (`NOTICE`・`ALERT`・`EMERGENCY`) を出す方法は「Cloud Run での使用」を参照してください。
 
 ### 0.3.0
 

@@ -185,6 +185,52 @@ class TestJsonFormatter:
             log_dict = json.loads(formatted)
             assert log_dict["severity"] == expected_severity
 
+    @pytest.mark.parametrize("level", ["debug", 5, None])
+    def test_format_severity_ignores_level_passed_by_extra(self, level):
+        """extra などで渡したフィールド level で severity を変えず、level はそのまま出力すること (#44)
+
+        ERROR のログが別の重大度として扱われると、severity で絞り込むクエリ・ログベースの指標・
+        Error Reporting の対象から外れる。文字列でない level で、ログの行が失われることも無くす。
+        """
+        formatter = JsonFormatter(error_event="app_error")
+        record = logging.LogRecord(
+            name="app",
+            level=logging.ERROR,
+            pathname="test.py",
+            lineno=1,
+            msg="boom",
+            args=(),
+            exc_info=None,
+        )
+        record.level = level
+        log_dict = json.loads(formatter.format(record))
+        assert log_dict["severity"] == "ERROR"
+        assert log_dict["level"] == level
+        assert log_dict["event"] == "app_error"
+
+    def test_format_severity_ignores_level_in_context(self):
+        """gnlog.context で置いたフィールド level でも、severity を変えないこと (#44)"""
+        import io
+
+        from gnlog import context
+
+        stream = io.StringIO()
+        handler = logging.StreamHandler(stream)
+        handler.setFormatter(JsonFormatter())
+        handler.addFilter(context.ContextFilter())
+        logger = logging.getLogger("test.cloud_logging.level_in_context")
+        logger.addHandler(handler)
+        logger.propagate = False
+        try:
+            with context.bind(level="debug"):
+                logger.error("boom")
+        finally:
+            logger.removeHandler(handler)
+            logger.propagate = True
+        log_dict = json.loads(stream.getvalue())
+        assert log_dict["severity"] == "ERROR"
+        assert log_dict["level"] == "debug"
+
     def test_format_output_is_valid_json(self):
         """format() の出力が有効なJSONであること"""
         formatter = JsonFormatter()
@@ -442,11 +488,32 @@ class TestJsonFormatter:
         assert log_dict["severity"] == "INFO"
         assert "time" in log_dict
 
+    def test_rename_fields_allows_level(self):
+        """引数 rename_fields で、フィールド level の名前を変えられること
+
+        このクラスは level を読まない (severity は levelname から決める。#44) ので、予約しない。
+        """
+        formatter = JsonFormatter(rename_fields={"level": "app_level"})
+        record = logging.LogRecord(
+            name="app",
+            level=logging.ERROR,
+            pathname="test.py",
+            lineno=1,
+            msg="boom",
+            args=(),
+            exc_info=None,
+        )
+        record.level = "debug"
+        log_dict = json.loads(formatter.format(record))
+        assert log_dict["app_level"] == "debug"
+        assert "level" not in log_dict
+        assert log_dict["severity"] == "ERROR"
+        JsonFormatter(rename_fields={"user_level": "level"})
+
     @pytest.mark.parametrize(
         "key",
         [
             "time",
-            "level",
             "severity",
             "logging.googleapis.com/labels",
             "exc_info",
