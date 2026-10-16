@@ -7,8 +7,21 @@ on:
 
 jobs:
     ci:
-        name: CI
+        name: CI (Python ${{ matrix.python-version }})
         runs-on: ubuntu-latest
+
+        strategy:
+            # 片方の版で失敗しても、もう片方の版の結果も見られるようにする
+            fail-fast: false
+            matrix:
+                # ファイル .python-version の版と、その次の版
+                python-version: ["3.13", "3.14"]
+
+        env:
+            # uv sync と uv run (Makefile の uv run を含む) が使う Python の版。
+            # ファイル .python-version より優先される。無いと、uv run が .python-version の版で
+            # venv を作り直す
+            UV_PYTHON: ${{ matrix.python-version }}
 
         steps:
             # https://github.com/actions/checkout
@@ -21,7 +34,7 @@ jobs:
                   enable-cache: true
 
             - name: Set up Python
-              run: uv python install
+              run: uv python install ${{ matrix.python-version }}
 
             - name: Install the project
               run: uv sync --locked --all-extras --dev
@@ -34,5 +47,7 @@ jobs:
             - name: Archive htmlcov
               uses: actions/upload-artifact@v4
               with:
-                  name: htmlcov
+                  # 版ごとに名前を分ける (matrix の job が同じ名前の artifact に
+                  # アップロードすると、衝突してエラーになる)
+                  name: htmlcov-${{ matrix.python-version }}
                   path: htmlcov/
