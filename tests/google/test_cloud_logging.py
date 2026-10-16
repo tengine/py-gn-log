@@ -15,7 +15,7 @@ class TestJsonFormatter:
         """parse() が期待するフィールドを返すこと"""
         formatter = JsonFormatter()
         fields = formatter.parse()
-        assert fields == ["name", "message", "stack_info"]
+        assert fields == ["name", "message"]
 
     def test_format_adds_time_in_rfc3339_utc(self):
         """format() が時刻を RFC 3339 形式 (UTC、マイクロ秒まで) でフィールド time に入れること"""
@@ -118,6 +118,46 @@ class TestJsonFormatter:
 
         assert log_dict["name"] == "my.logger"
         assert log_dict["message"] == "Test log message"
+
+    def _format_with_stack_info(
+        self, sinfo: str | None, rename_fields: dict[str, str] | None
+    ) -> dict:
+        formatter = JsonFormatter(rename_fields=rename_fields)
+        record = logging.LogRecord(
+            name="my.logger",
+            level=logging.INFO,
+            pathname="test.py",
+            lineno=10,
+            msg="Test log message",
+            args=(),
+            exc_info=None,
+            sinfo=sinfo,
+        )
+        return json.loads(formatter.format(record))
+
+    @pytest.mark.parametrize(
+        ("rename_fields", "key"),
+        [(None, "stack_info"), ({"stack_info": "stack"}, "stack")],
+    )
+    def test_format_omits_stack_info_without_stack(self, rename_fields, key):
+        """stack_info=True を指定していない行には、フィールド stack_info (名前を変えていればその名前) を出さないこと (#48)
+
+        値が常に null のキーが付くと、出力の形を決めて検査する利用側では決めた形に無いキーになり、
+        BigQuery へのシンクでは常に NULL の列ができるため。
+        """
+        log_dict = self._format_with_stack_info(None, rename_fields)
+        assert key not in log_dict
+        assert "stack_info" not in log_dict
+
+    @pytest.mark.parametrize(
+        ("rename_fields", "key"),
+        [(None, "stack_info"), ({"stack_info": "stack"}, "stack")],
+    )
+    def test_format_keeps_stack_info_with_stack(self, rename_fields, key):
+        """stack_info=True を指定した行には、これまでどおりフィールド stack_info (名前を変えていればその名前) を出すこと"""
+        sinfo = 'Stack (most recent call last):\n  File "app.py", line 1, in <module>'
+        log_dict = self._format_with_stack_info(sinfo, rename_fields)
+        assert log_dict[key] == sinfo
 
     def test_format_different_log_levels(self):
         """異なるログレベルで severity が正しく設定されること"""

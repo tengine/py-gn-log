@@ -35,9 +35,14 @@ FINGERPRINT_KEY = "fingerprint"
 # error_type が指定されなかったときの値
 ERROR_TYPE_UNKNOWN = "unknown"
 
-# python-json-logger がクラス logging.LogRecord から出力するフィールド
+# python-json-logger がすべての行に、クラス logging.LogRecord から出力するフィールド
 # (クラス JsonFormatter のメソッド parse が返すもの)
-_RECORD_FIELDS: tuple[str, ...] = ("name", "message", "stack_info")
+_PARSED_FIELDS: tuple[str, ...] = ("name", "message")
+
+# python-json-logger がクラス logging.LogRecord から出力するフィールド。stack_info は
+# parse が返さなくても、stack_info=True を指定した行にだけ python-json-logger が出力する。
+# 関数 validate_rename_fields が、変換後の名前との重なりを見るのに使う
+_RECORD_FIELDS: tuple[str, ...] = (*_PARSED_FIELDS, "stack_info")
 
 # クラス JsonFormatter が、親クラスのメソッド add_fields の後で読み書きするキー。
 # 引数 rename_fields の変換前・変換後に使うと、値がフォーマッターに上書きされるか、
@@ -131,6 +136,8 @@ class JsonFormatter(OriginalJsonFormatter):
     特別なフィールド (キー ``seconds`` と ``nanos`` を持つオブジェクトの ``timestamp``、
     ``timestampSeconds`` と ``timestampNanos`` の組) は上書きせずに出力します。
     Cloud Logging の文書では、これらは ``time`` より先に読まれます。
+
+    フィールド ``stack_info`` は、``stack_info=True`` を指定してログを書いた行だけに出力します。
     """
 
     def __init__(
@@ -182,9 +189,11 @@ class JsonFormatter(OriginalJsonFormatter):
 
         Returns:
             出力するフィールド名のリスト
-            name: ロガー名、message: ログメッセージ、stack_info: スタックトレース情報
+            name: ロガー名、message: ログメッセージ。stack_info は返さない。
+            返すと python-json-logger が値が None でも出力するので、stack_info=True を
+            指定した行にだけ python-json-logger が出力するのに任せる
         """
-        return list(_RECORD_FIELDS)
+        return list(_PARSED_FIELDS)
 
     def add_fields(
         self,

@@ -179,6 +179,8 @@ Cloud Run 上かどうかの判定は `gnlog.google.cloud_run.is_cloud_run()` �
 
 ログエントリーの時刻を呼び出し側で指定したいときは、キー `seconds` と `nanos` を持つオブジェクトのフィールド `timestamp` か、フィールド `timestampSeconds` と `timestampNanos` の組を `extra` などで渡します。クラス `gnlog.google.cloud_logging.JsonFormatter` (`setup_logging()` が JSON 形式で使う formatter) はこれらを上書きせずに出力し、[Cloud Logging の文書](https://cloud.google.com/logging/docs/agent/logging/configuration#special-fields)では、これらは `time` より先に読まれます。この文書は Logging エージェントの設定の文書ですが、[Cloud Run の文書](https://docs.cloud.google.com/run/docs/logging)も、構造化ログの特別なフィールドの説明としてこの文書を参照しています。
 
+フィールド `stack_info` (ログを書いた箇所までの呼び出し履歴) は、`logger.info(..., stack_info=True)` のように `stack_info=True` を指定してログを書いた行だけに出力します。
+
 ### リクエスト / タスク単位の文脈を全ログ行に付ける
 
 1 つのリクエストや 1 つのタスクの処理中に出るログ行を、あとから 1 つの ID で串刺しにしたい場面 (エラー応答に載せた ID から Cloud Logging を引く、複数サービスにまたがる処理を追う等) のために、`gnlog.context` を用意しています。
@@ -489,6 +491,7 @@ https://github.com/tengine/cloud-run-services-fastapi-example/pull/7
 - `extra` などで渡したフィールド `timestamp` を上書きしなくなった。扱いは「Cloud Run での使用」を参照
 - JSON 形式で出力するフィールドの名前を、引数 `rename_fields` で変えられるようにした (#41)。扱いは「出力するフィールドの名前を変える」を参照
 - ハンドラの level を設定しないようにした (#47)。`apply()` でロガーの level を `LOG_LEVEL` より低くすると、その level の行も出力される。どのロガーの行が出力されるかは「ルートロガーの level について」を参照
+- フィールド `stack_info` を、`stack_info=True` を指定した行だけに出力するようにした (#48)。これまでは、ほかの行にも値が `null` の `stack_info` を出力していた
 
 #### 0.3.0 からの移行
 
@@ -497,6 +500,7 @@ https://github.com/tengine/cloud-run-services-fastapi-example/pull/7
 - Cloud Logging の文書のとおりなら、ログエントリーの時刻は、Cloud Logging がログを取り込んだ時刻から、ログを書いた時刻 (`LogRecord` の作成時刻) に変わります。
 - `apply(log_level=...)` や `logging.getLogger(...).setLevel(...)` で、ロガーの level を `LOG_LEVEL` より低くしているコード (ライブラリを含む) がある場合は、`LOG_LEVEL` より低い level の行も出力されるようになります。`set_root_level=False` を指定し、ルートロガーの level を `LOG_LEVEL` より低くしている場合も同じです。子孫のロガーが level を引き継ぐ場合を含め、どのロガーの行が出力されるかは「ルートロガーの level について」を参照してください。これまでのようにハンドラでも `LOG_LEVEL` に絞るには、`setup_logging()` の戻り値 `setup` で `setup.handler.setLevel(setup.log_level_default)` を呼んでください。
 - 関数 `gnlog.output.install` に、level を設定した handler を渡している場合は、その level で行が絞られるようになります。これまでは `install()` が handler の level を、引数 `log_level` (省略したときは環境変数 `LOG_LEVEL`) の値で上書きしていました。handler の level で絞りたくない場合は、level を設定せずに渡してください。
+- `stack_info=True` を指定していない行には、フィールド `stack_info` が無くなります。出力にキー `stack_info` が必ずあることを前提にしている処理は、キーが無い行も扱えるように直してください。
 
 ### 0.3.0
 
