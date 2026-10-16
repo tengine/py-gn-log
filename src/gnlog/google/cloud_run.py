@@ -80,14 +80,16 @@ def setup_logging(
         LOG_FORMAT: ログフォーマット文字列 (テキスト形式のみ)
 
     Args:
-        log_level: ログレベル。None の場合は環境変数 LOG_LEVEL から取得
+        log_level: ログレベル。None の場合は環境変数 LOG_LEVEL から取得。ルートロガーの level
+            (set_root_level が True の場合) と、apply() の既定の level に使う。
+            handler の level には使わない (関数 gnlog.output.install を参照)
         output_path: ログファイルのパス (テキスト形式のみ)。None の場合は環境変数 LOG_FILE_PATH
         log_format: ログフォーマット文字列 (テキスト形式のみ)。None の場合は環境変数 LOG_FORMAT
         labels: Cloud Logging の labels に追加するキーと値
         verbose: True の場合、初期化と apply() の過程を診断用に標準エラー出力へ出す。
             Cloud Run では標準エラー出力も Cloud Logging に取り込まれ、構造化されていない
             エントリとして混じるため、不要なら False を指定する
-        set_root_level: True の場合、ルートロガーの level も log_level に揃える
+        set_root_level: True の場合、ルートロガーの level を log_level にする
         json_ensure_ascii: JSON 形式で出力する際に、非 ASCII 文字を \\\\uXXXX に escape するか
             どうか。False にすると日本語などをそのまま出力する
         json: True なら JSON 形式、False ならテキスト形式。None の場合は環境変数 GNLOG_FORMAT

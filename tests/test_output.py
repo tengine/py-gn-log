@@ -66,6 +66,57 @@ class TestInstall:
         setup.handler = logging.NullHandler()
         assert isinstance(setup.handler, logging.NullHandler)
 
+    @pytest.mark.parametrize("set_root_level", [True, False])
+    def test_applied_logger_below_log_level_reaches_handler(self, set_root_level):
+        """apply() で level を log_level より低くしたロガーの行が、handler に届くこと (#47)
+
+        LOG_LEVEL=WARNING で運用するアプリでも、apply() したロガー (操作ログなど) の
+        INFO だけは出せるようにするため。handler が log_level で絞ると、この行は捨てられる。
+        """
+        collector = _Collector()
+        setup = output.install(
+            collector,
+            log_level=logging.WARNING,
+            set_root_level=set_root_level,
+            verbose=False,
+        )
+        logger_name = "test.output.applied_below_log_level"
+        try:
+            logger = setup.apply(logger_name, log_level=logging.INFO)
+            logger.info("INFO from a logger applied with INFO")
+        finally:
+            logging.getLogger(logger_name).setLevel(logging.NOTSET)
+
+        assert collector.messages() == ["INFO from a logger applied with INFO"]
+
+    def test_logger_not_applied_is_filtered_by_root_level(self):
+        """apply() していないロガーの行は、ルートロガーの level (log_level) で絞られること
+
+        handler が level で絞らなくても、log_level より低い行は出ないことを確かめる。
+        """
+        collector = _Collector()
+        output.install(collector, log_level=logging.INFO, verbose=False)
+        other = logging.getLogger("test.output.not_applied")
+        other.setLevel(logging.NOTSET)  # 親 (root) の level に従わせる
+        other.debug("DEBUG from a logger that was not applied")
+        other.info("INFO from a logger that was not applied")
+
+        assert collector.messages() == ["INFO from a logger that was not applied"]
+
+
+class _Collector(logging.Handler):
+    """受け取った record を集める handler"""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.records: list[logging.LogRecord] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.records.append(record)
+
+    def messages(self) -> list[str]:
+        return [r.getMessage() for r in self.records]
+
 
 class TestImportIsolation:
     """共通部が provider を import しないことのテスト (#30)"""
