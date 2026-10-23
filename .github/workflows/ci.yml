@@ -10,6 +10,11 @@ jobs:
         name: CI (Python ${{ matrix.python-version }})
         runs-on: ubuntu-latest
 
+        permissions:
+            contents: read
+            # main への push で、型の検査とカバレッジの結果を、コミットのステータスに書くため
+            statuses: write
+
         strategy:
             # 片方の版で失敗しても、もう片方の版の結果も見られるようにする
             fail-fast: false
@@ -39,11 +44,41 @@ jobs:
             - name: Install the project
               run: uv sync --locked --all-extras --dev
 
-            - run: make check
+            - id: typecheck
+              run: make check
+            # main への push のときだけ、型の検査 (mypy) の結果を、コミットのステータス measure/typecheck に書く。
+            # 組織 tengine のリポジトリの CI の状況を、リポジトリ tengine/repo-management で集めるため
+            # (名前と書く値の決まりは、tengine/repo-management の docs/ci-measurements.md)。
+            # 型の検査が失敗しても書くので always() を付ける。ステップを飛ばした・取り消したときは書かない。
+            # 書くのは、ファイル .python-version の版の job だけにする (版ごとに書くと、後に終わった版の値が残るため)
+            - name: Report typecheck result as commit status
+              if: >-
+                  always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+                  && (steps.typecheck.outcome == 'success' || steps.typecheck.outcome == 'failure')
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  OUTCOME: ${{ steps.typecheck.outcome }}
+                  MATRIX_PYTHON: ${{ matrix.python-version }}
+              run: |
+                  [ "$MATRIX_PYTHON" = "$(cat .python-version)" ] || exit 0
+                  gh api --silent "repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" \
+                      -f state="$OUTCOME" -f context=measure/typecheck -f description="mypy: $OUTCOME"
             - run: make lint
             - run: make format git-check
 
             - run: make test-cov
+            # main への push のときだけ、make test-cov で測ったカバレッジ (行) を、コミットのステータス
+            # measure/line-coverage に書く (理由と、書く job は上と同じ)
+            - name: Report coverage as commit status
+              if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  MATRIX_PYTHON: ${{ matrix.python-version }}
+              run: |
+                  [ "$MATRIX_PYTHON" = "$(cat .python-version)" ] || exit 0
+                  total="$(uv run coverage report --format=total --precision=1)"
+                  gh api --silent "repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" \
+                      -f state=success -f context=measure/line-coverage -f description="$total%"
             - name: Archive htmlcov
               uses: actions/upload-artifact@v4
               with:
